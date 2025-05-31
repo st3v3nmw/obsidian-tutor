@@ -6,15 +6,22 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"changelog": "pnpm auto-changelog --template=compact --package"
 	},
-	"keywords": [],
+	"keywords": [
+		"obsidian",
+		"spaced repetition",
+		"personal knowledge base",
+		"self-taught"
+	],
 	"author": "Stephen Mwangi",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^22.15.22",
 		"@typescript-eslint/eslint-plugin": "8.33.0",
 		"@typescript-eslint/parser": "8.33.0",
+		"auto-changelog": "^2.5.0",
 		"builtin-modules": "5.0.0",
 		"esbuild": "0.25.5",
 		"obsidian": "latest",
