@@ -3,3 +3,13 @@
     <h1>Obsidian Tutor</h1>
     <p><i>Your notes become your tutor!</i></p>
 </div>
+
+### Usage
+
+Mark topics in your notes using:
+
+```markdown
+> [!topic] title
+```
+
+The plugin will automatically track and schedule reviews for these topics.

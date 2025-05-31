@@ -37,9 +37,7 @@ export class TopicManager {
                     let difficulty = 5.0;
 
                     if (i + 1 < lines.length) {
-                        console.log(lines[i+1])
                         const dataMatch = lines[i + 1].match(/^>\s*<!--(.+)-->$/);
-                        console.log(dataMatch);
                         if (dataMatch) {
                             const data = dataMatch[1].split(",");
                             if (data.length === 5) {

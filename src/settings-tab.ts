@@ -52,11 +52,5 @@ export class TutorSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     }));
         }
-
-        // Usage instructions
-        containerEl.createEl("h3", { text: "How to Use" });
-        containerEl.createEl("p", { text: "Mark topics in your notes using:" });
-        containerEl.createEl("pre", { text: "> [!topic] title" });
-        containerEl.createEl("p", { text: "The plugin will automatically track and schedule reviews for these topics." });
     }
 }

@@ -29,7 +29,7 @@ export class ReviewView extends ItemView {
 
     getDisplayText() {
         const currentTopic = this.topics[this.currentTopicIndex];
-        return currentTopic ? `Tutor: ${currentTopic.file.basename}` : "Tutor";
+        return currentTopic ? currentTopic.file.basename : "Tutor";
     }
 
     getIcon() {
@@ -153,11 +153,6 @@ export class ReviewView extends ItemView {
             attr: { style: "margin: 0 0 5px 0;" }
         });
 
-        titleEl.createEl("p", {
-            text: `From: ${currentTopic.file.basename}`,
-            attr: { style: "margin: 0; color: var(--text-muted); font-size: 0.9em;" }
-        });
-
         // Navigation controls
         const navEl = progressEl.createEl("div", {
             attr: { style: "display: flex; align-items: center; gap: 10px;" }
@@ -209,9 +204,9 @@ export class ReviewView extends ItemView {
         const currentTopic = this.getCurrentTopic();
         if (!currentTopic) return;
 
-        return `
-You are an adaptive learning tutor conducting spaced repetition reviews.
-Your goal is to assess a user's understanding through conversational questioning, then build their knowledge through Socratic dialogue.
+        return `You are an adaptive learning tutor conducting spaced repetition reviews.
+Your goal is to assess a user's understanding through conversational questioning,
+then build their knowledge through Socratic dialogue.
 
 ## Context
 They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 100).toFixed(0)}%)
@@ -219,30 +214,31 @@ They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 1
 Their notes:
 ${currentTopic.content}
 
-## Adaptive Questioning Strategy
-- 80-100%: Start with challenging applications, edge cases, or synthesis questions
-- 60-79%: Start with solid foundational questions, then build complexity
-- 40-59%: Start with basic topics, use examples and analogies
-- 20-39%: Start with very simple explanations, build slowly
-- 0-19%: Consider if prerequisites are missing, start ultra-basic
+## Questioning
+- 80-100%: Complex analysis, edge cases, critique scenarios
+- 60-79%: Applications, real-world connections
+- 40-59%: Core concepts, use examples and analogies
+- 20-39%: Simple definitions, build slowly
+- 0-19%: Check prerequisites, start ultra-basic
 
 ## Guidelines
-- Questions MUST be understandable in isolation - assume users DO NOT remember their notes verbatim
+- Questions must be self-contained - don't assume users remember their notes exactly
+- Prioritize conceptual understanding over memorization
 - Build understanding progressively - let them level up in future reviews
-- Focus on topicual grasp over factual recall
-- When you're confident in your assessment (after 3-5 exchanges), end with a score
-- Limit the conversation to the given topic - DO NOT go beyond
-- Keep responses short but comprehensive
-- The response MUST be JSON, use Markdown for the content & LaTeX for math
+- Stay focused on the given topic unless prerequisites are unclear
+- Be concise but thorough
+- End with a score when confident in your assessment (typically 4-8 exchanges)
 
 ## Response Format
 {
-  "content": "Your question or response (use LaTeX for math)",
+  "text": "Question or explanation",
   "score": <0.0-1.0 or null if continuing>
 }
 
-Start with one engaging question appropriate for their level.
-`;
+- JSON only, no leading text or commentary
+- Only .text should be in Markdown, use LaTeX for math
+
+Start with one engaging question based on their score.`;
     }
 
     async callAI() {
@@ -255,7 +251,7 @@ Start with one engaging question appropriate for their level.
 
             // Add conversation history
             for (const msg of this.conversation) {
-                const role = msg.sender === 'AI' ? 'assistant' : 'user';
+                const role = msg.sender === "AI" ? "assistant" : "user";
                 messages.push({ role, content: msg.content });
             }
 
@@ -264,11 +260,9 @@ Start with one engaging question appropriate for their level.
             try {
                 const parsed = JSON.parse(response);
 
-                console.log(parsed);
-
                 // Add tutor response to conversation
-                this.conversation.push({ sender: "Tutor", content: parsed.content });
-                await this.addMessageToUI("Tutor", parsed.content);
+                this.conversation.push({ sender: "Tutor", content: parsed.text });
+                await this.addMessageToUI("Tutor", parsed.text);
 
                 // Check if tutor provided final score
                 if (parsed.score !== null) {
@@ -276,7 +270,7 @@ Start with one engaging question appropriate for their level.
                     if (currentTopic) {
                         await this.plugin.topicManager.updateTopicInNote(currentTopic, parsed.score);
                         // Show completion message
-                        await this.addMessageToUI("System", `✅ Review completed! Score: ${(parsed.score * 100).toFixed(0)}%. Click "Next Topic" to continue or review another topic.`);
+                        await this.addMessageToUI("System", "✅ Review completed!");
                     }
                 } else {
                     this.inputEl.focus();
@@ -322,8 +316,12 @@ Start with one engaging question appropriate for their level.
         // Create content container
         const contentEl = messageEl.createEl("div");
 
-        // Render content as Markdown
-        await MarkdownRenderer.renderMarkdown(content, contentEl, "", this);
+        if (sender != "user") {
+            // Render content as Markdown
+            await MarkdownRenderer.renderMarkdown(content, contentEl, "", this);
+        } else {
+            contentEl.textContent = content;
+        }
 
         // Scroll to bottom
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;

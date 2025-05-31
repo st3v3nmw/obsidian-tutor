@@ -16,8 +16,6 @@ export class OpenRouterProvider implements LLMProvider {
             throw new Error("OpenRouter API key not configured");
         }
 
-        console.log(messages)
-
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {

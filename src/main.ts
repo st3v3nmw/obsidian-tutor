@@ -13,18 +13,18 @@ export default class TutorPlugin extends Plugin {
         await this.loadSettings();
         this.topicManager = new TopicManager(this.app, this);
 
-        // Register the review view
+        // Views
         this.registerView(
             VIEW_TYPE_REVIEW,
             (leaf) => new ReviewView(leaf, this)
         );
 
-        // Add ribbon icon
-        this.addRibbonIcon("brain-circuit", "Tutor Review", () => {
+        // Ribbon Icons
+        this.addRibbonIcon("brain-circuit", "Start Review Session", () => {
             this.startReviewSession();
         });
 
-        // Add commands
+        // Commands
         this.addCommand({
             id: "start-review",
             name: "Start Review Session",
@@ -37,7 +37,7 @@ export default class TutorPlugin extends Plugin {
             callback: () => this.showDueCards()
         });
 
-        // Add settings tab
+        // Settings
         this.addSettingTab(new TutorSettingTab(this.app, this));
 
         console.log("Tutor plugin loaded");
