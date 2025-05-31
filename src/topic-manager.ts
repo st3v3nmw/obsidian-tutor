@@ -56,7 +56,6 @@ export class TopicManager {
                     topics.push({
                         name: topicName,
                         file,
-                        lineNumber: i,
                         content: context,
                         nextReview,
                         score,
@@ -108,17 +107,24 @@ export class TopicManager {
         const content = await this.app.vault.read(topic.file);
         const lines = content.split("\n");
 
+        // Find the topic callout by matching the exact topic name
+        const topicPattern = `> [!topic] ${topic.name}`;
+        const topicLineIndex = lines.findIndex(line => line.trim() === topicPattern.trim());
+
+        if (topicLineIndex === -1) {
+            new Notice(`Could not find topic "${topic.name}" in note ${topic.file.basename}`);
+            return;
+        }
+
         // Format new data comment
         const nextReview = newCard.due.toISOString().split("T")[0];
         const newDataComment = `> <!--${nextReview},${newScore.toFixed(2)},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)}-->`;
 
         // Update or add data comment
-        if (topic.lineNumber + 1 < lines.length && lines[topic.lineNumber + 1].match(/^>\s*<!--(.+)-->$/)) {
-            // Replace existing comment
-            lines[topic.lineNumber + 1] = newDataComment;
+        if (topicLineIndex + 1 < lines.length && lines[topicLineIndex + 1].match(/^>\s*<!--(.+)-->$/)) {
+            lines[topicLineIndex + 1] = newDataComment;
         } else {
-            // Insert new comment
-            lines.splice(topic.lineNumber + 1, 0, newDataComment);
+            lines.splice(topicLineIndex + 1, 0, newDataComment);
         }
 
         // Write back to file
