@@ -1,10 +1,11 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import GrimoirePlugin from "./main";
 
-export class GrimoireSettingTab extends PluginSettingTab {
-    plugin: GrimoirePlugin;
+import TutorPlugin from "src/main";
 
-    constructor(app: App, plugin: GrimoirePlugin) {
+export class TutorSettingTab extends PluginSettingTab {
+    plugin: TutorPlugin;
+
+    constructor(app: App, plugin: TutorPlugin) {
         super(app, plugin);
         this.plugin = plugin;
     }
@@ -13,7 +14,7 @@ export class GrimoireSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl("h2", { text: "Grimoire Settings" });
+        containerEl.createEl("h2", { text: "Tutor Settings" });
 
         new Setting(containerEl)
             .setName("AI Provider")
@@ -54,8 +55,8 @@ export class GrimoireSettingTab extends PluginSettingTab {
 
         // Usage instructions
         containerEl.createEl("h3", { text: "How to Use" });
-        containerEl.createEl("p", { text: "Mark concepts in your notes using:" });
-        containerEl.createEl("pre", { text: "> [!topic] concept name" });
-        containerEl.createEl("p", { text: "The plugin will automatically track and schedule reviews for these concepts." });
+        containerEl.createEl("p", { text: "Mark topics in your notes using:" });
+        containerEl.createEl("pre", { text: "> [!topic] title" });
+        containerEl.createEl("p", { text: "The plugin will automatically track and schedule reviews for these topics." });
     }
 }

@@ -23,8 +23,8 @@ export class OpenRouterProvider implements LLMProvider {
             headers: {
                 "Authorization": `Bearer ${this.apiKey}`,
                 "Content-Type": "application/json",
-                "X-Title": "Obsidian Grimoire",
-                "HTTP-Referer": "https://github.com/st3v3nmw/obsidian-grimoire"
+                "X-Title": "Obsidian Tutor",
+                "HTTP-Referer": "https://github.com/st3v3nmw/obsidian-tutor"
             },
             body: JSON.stringify({
                 model: this.model,

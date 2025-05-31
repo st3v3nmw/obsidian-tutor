@@ -1,14 +1,15 @@
-import { ItemView, WorkspaceLeaf, Notice, MarkdownRenderer } from "obsidian";
-import { ConceptCard } from "./types";
-import { LLMProvider, OpenRouterProvider } from "./llm-provider";
-import GrimoirePlugin from "./main";
+import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from "obsidian";
 
-export const VIEW_TYPE_REVIEW = "grimoire-review";
+import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
+import TutorPlugin from "src/main";
+import { TopicCard } from "src/types";
+
+export const VIEW_TYPE_REVIEW = "tutor-review";
 
 export class ReviewView extends ItemView {
-    private plugin: GrimoirePlugin;
-    private concepts: ConceptCard[] = [];
-    private currentConceptIndex = 0;
+    private plugin: TutorPlugin;
+    private topics: TopicCard[] = [];
+    private currentTopicIndex = 0;
     private conversation: { sender: string; content: string }[] = [];
     private conversationEl: HTMLElement;
     private inputEl: HTMLTextAreaElement;
@@ -17,7 +18,7 @@ export class ReviewView extends ItemView {
     private isWaitingForAI = false;
     private llmProvider: LLMProvider;
 
-    constructor(leaf: WorkspaceLeaf, plugin: GrimoirePlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: TutorPlugin) {
         super(leaf);
         this.plugin = plugin;
     }
@@ -27,8 +28,8 @@ export class ReviewView extends ItemView {
     }
 
     getDisplayText() {
-        const currentConcept = this.concepts[this.currentConceptIndex];
-        return currentConcept ? `Tutor: ${currentConcept.file.basename}` : "Tutor";
+        const currentTopic = this.topics[this.currentTopicIndex];
+        return currentTopic ? `Tutor: ${currentTopic.file.basename}` : "Tutor";
     }
 
     getIcon() {
@@ -36,31 +37,31 @@ export class ReviewView extends ItemView {
     }
 
     async setState(state: any, result: any) {
-        if (state.concepts) {
-            await this.loadConcepts(state.concepts);
+        if (state.topics) {
+            await this.loadTopics(state.topics);
         }
         return super.setState(state, result);
     }
 
-    async loadConcepts(concepts: ConceptCard[]) {
-        this.concepts = concepts;
-        this.currentConceptIndex = 0;
+    async loadTopics(topics: TopicCard[]) {
+        this.topics = topics;
+        this.currentTopicIndex = 0;
         this.conversation = [];
         this.initializeLLMProvider();
         await this.render();
-        if (this.getCurrentConcept()) {
+        if (this.getCurrentTopic()) {
             await this.callAI();
         }
     }
 
-    private getCurrentConcept(): ConceptCard | null {
-        return this.concepts[this.currentConceptIndex] || null;
+    private getCurrentTopic(): TopicCard | null {
+        return this.topics[this.currentTopicIndex] || null;
     }
 
     getState() {
         return {
-            concepts: this.concepts,
-            currentConceptIndex: this.currentConceptIndex
+            topics: this.topics,
+            currentTopicIndex: this.currentTopicIndex
         };
     }
 
@@ -81,9 +82,9 @@ export class ReviewView extends ItemView {
         const container = this.containerEl.children[1];
         container.empty();
 
-        const currentConcept = this.getCurrentConcept();
-        if (!currentConcept) {
-            container.createEl("p", { text: "No concepts available for review." });
+        const currentTopic = this.getCurrentTopic();
+        if (!currentTopic) {
+            container.createEl("p", { text: "No topics available for review." });
             return;
         }
 
@@ -96,7 +97,7 @@ export class ReviewView extends ItemView {
 
         // Conversation area
         this.conversationEl = container.createEl("div", {
-            cls: "grimoire-conversation",
+            cls: "tutor-conversation",
             attr: {
                 style: "flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px;"
             }
@@ -138,8 +139,8 @@ export class ReviewView extends ItemView {
         if (!this.headerEl) return;
 
         this.headerEl.empty();
-        const currentConcept = this.getCurrentConcept();
-        if (!currentConcept) return;
+        const currentTopic = this.getCurrentTopic();
+        if (!currentTopic) return;
 
         // Progress and title
         const progressEl = this.headerEl.createEl("div", {
@@ -148,12 +149,12 @@ export class ReviewView extends ItemView {
 
         const titleEl = progressEl.createEl("div");
         titleEl.createEl("h2", {
-            text: `${currentConcept.name}`,
+            text: `${currentTopic.name}`,
             attr: { style: "margin: 0 0 5px 0;" }
         });
 
         titleEl.createEl("p", {
-            text: `From: ${currentConcept.file.basename}`,
+            text: `From: ${currentTopic.file.basename}`,
             attr: { style: "margin: 0; color: var(--text-muted); font-size: 0.9em;" }
         });
 
@@ -164,19 +165,19 @@ export class ReviewView extends ItemView {
 
         // Progress indicator
         navEl.createEl("span", {
-            text: `${this.currentConceptIndex + 1} of ${this.concepts.length}`,
+            text: `${this.currentTopicIndex + 1} of ${this.topics.length}`,
             attr: { style: "color: var(--text-muted); font-size: 0.9em;" }
         });
 
         // Next button
         this.nextBtn = navEl.createEl("button", {
-            text: this.currentConceptIndex < this.concepts.length - 1 ? "Next Concept" : "Finish",
+            text: this.currentTopicIndex < this.topics.length - 1 ? "Next Topic" : "Finish",
             attr: { style: "padding: 6px 12px; border-radius: 4px; font-size: 0.9em;" }
         });
 
-        this.nextBtn.onclick = () => this.nextConcept();
+        this.nextBtn.onclick = () => this.nextTopic();
 
-        // Disable if waiting for AI or if it"s the last concept and not finished
+        // Disable if waiting for AI or if it"s the last topic and not finished
         this.updateNextButton();
     }
 
@@ -186,49 +187,49 @@ export class ReviewView extends ItemView {
         // Enable if waiting for AI to prevent spam
         this.nextBtn.disabled = this.isWaitingForAI;
 
-        if (this.currentConceptIndex >= this.concepts.length - 1) {
+        if (this.currentTopicIndex >= this.topics.length - 1) {
             this.nextBtn.textContent = "Finish";
         }
     }
 
-    private async nextConcept() {
-        if (this.currentConceptIndex < this.concepts.length - 1) {
-            this.currentConceptIndex++;
+    private async nextTopic() {
+        if (this.currentTopicIndex < this.topics.length - 1) {
+            this.currentTopicIndex++;
             this.conversation = [];
             this.conversationEl.empty();
             this.updateHeader();
             await this.callAI();
         } else {
-            // Finished all concepts
-            await this.addMessageToUI("System", "🎉 All concepts reviewed! Great job! You can close this tab.");
+            // Finished all topics
+            await this.addMessageToUI("System", "🎉 All topics reviewed! Great job! You can close this tab.");
         }
     }
 
     private getSystemPrompt() {
-        const currentConcept = this.getCurrentConcept();
-        if (!currentConcept) return;
+        const currentTopic = this.getCurrentTopic();
+        if (!currentTopic) return;
 
         return `
 You are an adaptive learning tutor conducting spaced repetition reviews.
 Your goal is to assess a user's understanding through conversational questioning, then build their knowledge through Socratic dialogue.
 
 ## Context
-They're reviewing: "${currentConcept.name}" (last score: ${(currentConcept.score * 100).toFixed(0)}%)
+They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 100).toFixed(0)}%)
 
 Their notes:
-${currentConcept.content}
+${currentTopic.content}
 
 ## Adaptive Questioning Strategy
 - 80-100%: Start with challenging applications, edge cases, or synthesis questions
 - 60-79%: Start with solid foundational questions, then build complexity
-- 40-59%: Start with basic concepts, use examples and analogies
+- 40-59%: Start with basic topics, use examples and analogies
 - 20-39%: Start with very simple explanations, build slowly
 - 0-19%: Consider if prerequisites are missing, start ultra-basic
 
 ## Guidelines
 - Questions MUST be understandable in isolation - assume users DO NOT remember their notes verbatim
 - Build understanding progressively - let them level up in future reviews
-- Focus on conceptual grasp over factual recall
+- Focus on topicual grasp over factual recall
 - When you're confident in your assessment (after 3-5 exchanges), end with a score
 - Limit the conversation to the given topic - DO NOT go beyond
 - Keep responses short but comprehensive
@@ -271,11 +272,11 @@ Start with one engaging question appropriate for their level.
 
                 // Check if tutor provided final score
                 if (parsed.score !== null) {
-                    const currentConcept = this.getCurrentConcept();
-                    if (currentConcept) {
-                        await this.plugin.conceptManager.updateConceptInNote(currentConcept, parsed.score);
+                    const currentTopic = this.getCurrentTopic();
+                    if (currentTopic) {
+                        await this.plugin.topicManager.updateTopicInNote(currentTopic, parsed.score);
                         // Show completion message
-                        await this.addMessageToUI("System", `✅ Review completed! Score: ${(parsed.score * 100).toFixed(0)}%. Click "Next Concept" to continue or review another concept.`);
+                        await this.addMessageToUI("System", `✅ Review completed! Score: ${(parsed.score * 100).toFixed(0)}%. Click "Next Topic" to continue or review another topic.`);
                     }
                 } else {
                     this.inputEl.focus();

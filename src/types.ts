@@ -1,6 +1,6 @@
 import { TFile } from "obsidian";
 
-export interface ConceptCard {
+export interface TopicCard {
     name: string;
     file: TFile;
     lineNumber: number;

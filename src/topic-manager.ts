@@ -1,20 +1,21 @@
 import { App, Notice } from "obsidian";
-import { fsrs, Rating, Card, Grade } from "ts-fsrs";
-import { ConceptCard } from "./types";
-import GrimoirePlugin from "./main";
+import { Card, fsrs, Grade, Rating } from "ts-fsrs";
 
-export class ConceptManager {
+import TutorPlugin from "src/main";
+import { TopicCard } from "src/types";
+
+export class TopicManager {
     private app: App;
-    private plugin: GrimoirePlugin;
+    private plugin: TutorPlugin;
     private fsrsInstance = fsrs();
 
-    constructor(app: App, plugin: GrimoirePlugin) {
+    constructor(app: App, plugin: TutorPlugin) {
         this.app = app;
         this.plugin = plugin;
     }
 
-    async getAllConcepts(): Promise<ConceptCard[]> {
-        const concepts: ConceptCard[] = [];
+    async getAllTopics(): Promise<TopicCard[]> {
+        const topics: TopicCard[] = [];
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
@@ -23,10 +24,10 @@ export class ConceptManager {
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                const conceptMatch = line.match(/^>\s*\[!topic\]\s*(.+)$/);
+                const topicMatch = line.match(/^>\s*\[!topic\]\s*(.+)$/);
 
-                if (conceptMatch) {
-                    const conceptName = conceptMatch[1].trim();
+                if (topicMatch) {
+                    const topicName = topicMatch[1].trim();
 
                     // Look for data comment on next line
                     let nextReview = new Date();
@@ -54,8 +55,8 @@ export class ConceptManager {
                     // Use entire note as context - user can place callout anywhere
                     const context = content;
 
-                    concepts.push({
-                        name: conceptName,
+                    topics.push({
+                        name: topicName,
                         file,
                         lineNumber: i,
                         content: context,
@@ -69,13 +70,13 @@ export class ConceptManager {
             }
         }
 
-        return concepts;
+        return topics;
     }
 
-    async getDueConcepts(): Promise<ConceptCard[]> {
-        const allConcepts = await this.getAllConcepts();
+    async getDueTopics(): Promise<TopicCard[]> {
+        const allTopics = await this.getAllTopics();
         const now = new Date();
-        return allConcepts.filter(concept => concept.nextReview <= now);
+        return allTopics.filter(topic => topic.nextReview <= now);
     }
 
     mapScoreToGrade(score: number): Grade {
@@ -85,19 +86,19 @@ export class ConceptManager {
         return Rating.Easy;
     }
 
-    async updateConceptInNote(concept: ConceptCard, newScore: number) {
+    async updateTopicInNote(topic: TopicCard, newScore: number) {
         // Create FSRS card from current state
         const card: Card = {
-            due: concept.nextReview,
-            stability: concept.stability,
-            difficulty: concept.difficulty,
-            elapsed_days: concept.interval,
-            scheduled_days: concept.interval,
+            due: topic.nextReview,
+            stability: topic.stability,
+            difficulty: topic.difficulty,
+            elapsed_days: topic.interval,
+            scheduled_days: topic.interval,
             learning_steps: 0,
             reps: 1,
             lapses: 0,
             state: 2, // Review state
-            last_review: new Date(Date.now() - concept.interval * 24 * 60 * 60 * 1000)
+            last_review: new Date(Date.now() - topic.interval * 24 * 60 * 60 * 1000)
         };
 
         // Get new card state from FSRS
@@ -106,7 +107,7 @@ export class ConceptManager {
         const newCard = result.card;
 
         // Read current file content
-        const content = await this.app.vault.read(concept.file);
+        const content = await this.app.vault.read(topic.file);
         const lines = content.split("\n");
 
         // Format new data comment
@@ -114,18 +115,18 @@ export class ConceptManager {
         const newDataComment = `> <!--${nextReview},${newScore.toFixed(2)},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)}-->`;
 
         // Update or add data comment
-        if (concept.lineNumber + 1 < lines.length && lines[concept.lineNumber + 1].match(/^>\s*<!--(.+)-->$/)) {
+        if (topic.lineNumber + 1 < lines.length && lines[topic.lineNumber + 1].match(/^>\s*<!--(.+)-->$/)) {
             // Replace existing comment
-            lines[concept.lineNumber + 1] = newDataComment;
+            lines[topic.lineNumber + 1] = newDataComment;
         } else {
             // Insert new comment
-            lines.splice(concept.lineNumber + 1, 0, newDataComment);
+            lines.splice(topic.lineNumber + 1, 0, newDataComment);
         }
 
         // Write back to file
         const newContent = lines.join("\n");
-        await this.app.vault.modify(concept.file, newContent);
+        await this.app.vault.modify(topic.file, newContent);
 
-        new Notice(`Updated ${concept.name} - next review: ${nextReview}`);
+        new Notice(`Updated ${topic.name} - next review: ${nextReview}`);
     }
 }
