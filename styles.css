@@ -1,0 +1,4 @@
+.callout[data-callout="topic"] {
+    --callout-color: 40, 40, 43;
+    --callout-icon: lucide-messages-square;
+}

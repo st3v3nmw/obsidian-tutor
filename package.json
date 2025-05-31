@@ -20,5 +20,8 @@
 		"obsidian": "latest",
 		"tslib": "2.8.1",
 		"typescript": "5.8.3"
+	},
+	"dependencies": {
+		"ts-fsrs": "^5.0.0"
 	}
 }
