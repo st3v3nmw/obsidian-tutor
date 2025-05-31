@@ -9,4 +9,5 @@ export interface TopicCard {
     interval: number;
     stability: number;
     difficulty: number;
+    reps: number;
 }

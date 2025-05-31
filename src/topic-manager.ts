@@ -1,5 +1,5 @@
 import { App, Notice } from "obsidian";
-import { Card, fsrs, Grade, Rating } from "ts-fsrs";
+import { Card, fsrs, Grade, Rating, State } from "ts-fsrs";
 
 import TutorPlugin from "src/main";
 import { TopicCard } from "src/types";
@@ -35,17 +35,19 @@ export class TopicManager {
                     let interval = 1;
                     let stability = 2.5;
                     let difficulty = 5.0;
+                    let reps = 0;
 
                     if (i + 1 < lines.length) {
                         const dataMatch = lines[i + 1].match(/^>\s*<!--(.+)-->$/);
                         if (dataMatch) {
                             const data = dataMatch[1].split(",");
-                            if (data.length === 5) {
+                            if (data.length === 6) {
                                 nextReview = new Date(data[0]);
                                 score = parseFloat(data[1]);
                                 interval = parseInt(data[2]);
                                 stability = parseFloat(data[3]);
                                 difficulty = parseFloat(data[4]);
+                                reps = parseInt(data[5]);
                             }
                         }
                     }
@@ -61,7 +63,8 @@ export class TopicManager {
                         score,
                         interval,
                         stability,
-                        difficulty
+                        difficulty,
+                        reps
                     });
                 }
             }
@@ -92,10 +95,9 @@ export class TopicManager {
             elapsed_days: topic.interval,
             scheduled_days: topic.interval,
             learning_steps: 0,
-            reps: 1,
+            reps: topic.reps,
             lapses: 0,
-            state: 2, // Review state
-            last_review: new Date(Date.now() - topic.interval * 24 * 60 * 60 * 1000)
+            state: State.Review
         };
 
         // Get new card state from FSRS
@@ -118,7 +120,7 @@ export class TopicManager {
 
         // Format new data comment
         const nextReview = newCard.due.toISOString().split("T")[0];
-        const newDataComment = `> <!--${nextReview},${newScore.toFixed(2)},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)}-->`;
+        const newDataComment = `> <!--${nextReview},${newScore.toFixed(2)},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps}-->`;
 
         // Update or add data comment
         if (topicLineIndex + 1 < lines.length && lines[topicLineIndex + 1].match(/^>\s*<!--(.+)-->$/)) {
