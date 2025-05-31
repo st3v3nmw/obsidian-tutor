@@ -34,9 +34,9 @@ jobs:
 
       - name: Extract release notes
         id: extract-release-notes
-        uses: ffurrer2/extract-release-notes@v1
+        uses: ffurrer2/extract-release-notes@v2
         with:
-          changelog_file: docs/docs/changelog.md
+          changelog_file: CHANGELOG.md
 
       - name: Create Release
         id: create-release
