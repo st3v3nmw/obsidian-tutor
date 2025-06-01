@@ -49,6 +49,8 @@ export class TopicManager {
                                 difficulty = parseFloat(data[4]);
                                 reps = parseInt(data[5]);
                             }
+
+                            i++;
                         }
                     }
 
@@ -80,8 +82,8 @@ export class TopicManager {
     }
 
     mapScoreToGrade(score: number): Grade {
-        if (score < 0.3) return Rating.Again;
-        if (score < 0.6) return Rating.Hard;
+        if (score < 0.2) return Rating.Again;
+        if (score < 0.5) return Rating.Hard;
         if (score < 0.8) return Rating.Good;
         return Rating.Easy;
     }

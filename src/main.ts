@@ -63,36 +63,36 @@ export default class TutorPlugin extends Plugin {
             return;
         }
 
-        // Check if review view is already open
-        const existingLeaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
+        // Check if the review view is already open
+        let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
 
-        if (existingLeaf) {
+        if (leaf) {
             // Use existing view and load new topics
-            const view = existingLeaf.view as ReviewView;
+            const view = leaf.view as ReviewView;
             await view.loadTopics(dueTopics);
-            this.app.workspace.setActiveLeaf(existingLeaf);
         } else {
             // Create new view
-            const leaf = this.app.workspace.getLeaf("tab");
+            leaf = this.app.workspace.getLeaf("tab");
             await leaf.setViewState({
                 type: VIEW_TYPE_REVIEW,
                 state: { topics: dueTopics }
             });
-            this.app.workspace.setActiveLeaf(leaf);
         }
+
+        this.app.workspace.setActiveLeaf(leaf);
     }
 
     async showDueCards() {
         const dueTopics = await this.topicManager.getDueTopics();
 
         if (dueTopics.length === 0) {
-            new Notice("No topics due for review!");
+            new Notice("No topics due for review.");
             return;
         }
 
         const message = `Due for review (${dueTopics.length}):\n\n` +
             dueTopics.map(c => `• ${c.name} (${c.file.basename})`).join("\n");
 
-        new Notice(message, 5000);
+        new Notice(message, 0);
     }
 }

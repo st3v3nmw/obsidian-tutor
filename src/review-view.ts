@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
 
 import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
@@ -40,6 +40,7 @@ export class ReviewView extends ItemView {
         if (state.topics) {
             await this.loadTopics(state.topics);
         }
+
         return super.setState(state, result);
     }
 
@@ -47,8 +48,10 @@ export class ReviewView extends ItemView {
         this.topics = topics;
         this.currentTopicIndex = 0;
         this.conversation = [];
-        this.initializeLLMProvider();
+
         await this.render();
+
+        this.initializeLLMProvider();
         if (this.getCurrentTopic()) {
             await this.callAI();
         }
@@ -192,11 +195,13 @@ export class ReviewView extends ItemView {
             this.currentTopicIndex++;
             this.conversation = [];
             this.conversationEl.empty();
+            this.inputEl.disabled = false
             this.updateHeader();
+
             await this.callAI();
         } else {
             // Finished all topics
-            await this.addMessageToUI("System", "🎉 All topics reviewed! Great job! You can close this tab.");
+            await this.addMessageToUI("System", "🎉 All topics reviewed! Great job!");
         }
     }
 
@@ -205,8 +210,8 @@ export class ReviewView extends ItemView {
         if (!currentTopic) return;
 
         return `You are an adaptive learning tutor conducting spaced repetition reviews.
-Your goal is to assess a user's understanding through conversational questioning,
-then build their knowledge through Socratic dialogue.
+Your goal is to assess a user's understanding through conversational questioning
+and build their knowledge through Socratic dialogue.
 
 ## Context
 They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 100).toFixed(0)}%)
@@ -214,19 +219,18 @@ They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 1
 Their notes:
 ${currentTopic.content}
 
-## Questioning
+## Questioning & Scoring
 - 80-100%: Complex analysis, edge cases, critique scenarios
 - 60-79%: Applications, real-world connections
 - 40-59%: Core concepts, use examples and analogies
 - 20-39%: Simple definitions, build slowly
 - 0-19%: Check prerequisites, start ultra-basic
+- Scores reflect their understanding based on their responses only
 
 ## Guidelines
 - Questions must be self-contained - don't assume users remember their notes exactly
-- Prioritize conceptual understanding over memorization
 - Build understanding progressively - let them level up in future reviews
-- Stay focused on the given topic unless prerequisites are unclear
-- Be concise but thorough
+- Be concise but thorough; stay focused on the given topic
 - End with a score when confident in your assessment (typically 4-8 exchanges)
 
 ## Response Format
@@ -235,8 +239,9 @@ ${currentTopic.content}
   "score": <0.0-1.0 or null if continuing>
 }
 
-- JSON only, no leading text or commentary
-- Only .text should be in Markdown, use LaTeX for math
+- Your response MUST BE valid JSON, no leading text or commentary
+- DO NOT wrap the response in a json code fence
+- Only the text field should be in Markdown, use LaTeX for math
 
 Start with one engaging question based on their score.`;
     }
@@ -267,24 +272,19 @@ Start with one engaging question based on their score.`;
                 // Check if tutor provided final score
                 if (parsed.score !== null) {
                     const currentTopic = this.getCurrentTopic();
-                    if (currentTopic) {
-                        await this.plugin.topicManager.updateTopicInNote(currentTopic, parsed.score);
-                        // Show completion message
-                        await this.addMessageToUI("System", "✅ Review completed!");
-                    }
-                } else {
-                    this.inputEl.focus();
+                    await this.plugin.topicManager.updateTopicInNote(currentTopic!, parsed.score);
+
+                    // Show completion message
+                    this.inputEl.disabled = true
+                    await this.addMessageToUI("System", "✅ Review completed!");
                 }
             } catch (e) {
-                console.error("Tutor did not return valid JSON: ", response)
-
-                this.conversation.push({ sender: "Tutor", content: response });
-                await this.addMessageToUI("Tutor", response);
-                this.inputEl.focus();
+                this.inputEl.disabled = true
+                await this.addMessageToUI("System", "Error: Tutor did not return valid JSON: " + response)
             }
 
         } catch (error) {
-            new Notice("Error communicating with Tutor: " + error.message);
+            this.inputEl.disabled = true
             await this.addMessageToUI("System", "Error: " + error.message);
         }
 
@@ -313,15 +313,9 @@ Start with one engaging question based on their score.`;
             });
         }
 
-        // Create content container
+        // Render message
         const contentEl = messageEl.createEl("div");
-
-        if (sender != "user") {
-            // Render content as Markdown
-            await MarkdownRenderer.renderMarkdown(content, contentEl, "", this);
-        } else {
-            contentEl.textContent = content;
-        }
+        await MarkdownRenderer.render(this.app, content, contentEl, "", this);
 
         // Scroll to bottom
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
