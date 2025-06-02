@@ -220,11 +220,11 @@ Their notes:
 ${currentTopic.content}
 
 ## Questioning & Scoring
-- 80-100%: Complex analysis, edge cases, critique scenarios
+- 80-100%: Complex analysis, synthesis, critique, edge cases
 - 60-79%: Applications, real-world connections
-- 40-59%: Core concepts, use examples and analogies
-- 20-39%: Simple definitions, build slowly
-- 0-19%: Check prerequisites, start ultra-basic
+- 40-59%: Core concepts with examples/analogies
+- 20-39%: Simple definitions, build foundational understanding
+- 0-19%: Check prerequisites, recall basic facts, start ultra-basic
 - Scores reflect their understanding based on their responses only
 
 ## Guidelines
