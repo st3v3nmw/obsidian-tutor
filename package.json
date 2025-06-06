@@ -1,13 +1,13 @@
 {
 	"name": "obsidian-tutor",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "Your notes become your tutor!",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"changelog": "pnpm auto-changelog --template=compact --package"
+		"changelog": "pnpm auto-changelog --sort-commits=date-desc --template=compact --package"
 	},
 	"keywords": [
 		"obsidian",
