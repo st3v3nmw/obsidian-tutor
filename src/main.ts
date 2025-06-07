@@ -32,9 +32,9 @@ export default class TutorPlugin extends Plugin {
         });
 
         this.addCommand({
-            id: "show-due-cards",
-            name: "Show Due Cards",
-            callback: () => this.showDueCards()
+            id: "show-due-topics",
+            name: "Show Due Topics",
+            callback: () => this.showDueTopics()
         });
 
         // Settings
@@ -82,7 +82,7 @@ export default class TutorPlugin extends Plugin {
         this.app.workspace.setActiveLeaf(leaf);
     }
 
-    async showDueCards() {
+    async showDueTopics() {
         const dueTopics = await this.topicManager.getDueTopics();
 
         if (dueTopics.length === 0) {
