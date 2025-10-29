@@ -5,7 +5,7 @@ export interface TopicCard {
     file: TFile;
     content: string;
     nextReview: Date;
-    score: number;
+    rating: "again" | "hard" | "good" | "easy";
     interval: number;
     stability: number;
     difficulty: number;

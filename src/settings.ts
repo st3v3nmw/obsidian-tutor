@@ -1,13 +1,11 @@
 export interface TutorSettings {
-    provider: "openrouter" | "claude";
+    provider: "openrouter";
     apiKey: string;
-    openrouterModel: string;
-    claudeModel: string;
+    model: string;
 }
 
 export const DEFAULT_SETTINGS: TutorSettings = {
     provider: "openrouter",
     apiKey: "",
-    openrouterModel: "anthropic/claude-sonnet-4",
-    claudeModel: "claude-sonnet-4-0"
+    model: "anthropic/claude-sonnet-4.5",
 };

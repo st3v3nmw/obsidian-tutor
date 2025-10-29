@@ -37,20 +37,6 @@ export default class TutorPlugin extends Plugin {
             callback: () => this.showDueTopics()
         });
 
-        this.addCommand({
-            id: "tutor-insert-topic-callout",
-            name: "Insert Topic Callout",
-            editorCallback(editor, ctx) {
-                const cursor = editor.getCursor();
-                editor.replaceSelection("> [!topic] title\n");
-                editor.setSelection(
-                    // start to end of "title"
-                    { line: cursor.line, ch: cursor.ch + 11 },
-                    { line: cursor.line, ch: cursor.ch + 16 }
-                );
-            }
-        });
-
         // Settings
         this.addSettingTab(new TutorSettingTab(this.app, this));
 

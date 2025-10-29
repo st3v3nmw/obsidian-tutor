@@ -23,7 +23,7 @@ export class TutorSettingTab extends PluginSettingTab {
                 .addOption("openrouter", "OpenRouter")
                 .addOption("claude", "Claude (Coming Soon)")
                 .setValue(this.plugin.settings.provider)
-                .onChange(async (value: "openrouter" | "claude") => {
+                .onChange(async (value: "openrouter") => {
                     this.plugin.settings.provider = value;
                     await this.plugin.saveSettings();
                     this.display();
@@ -42,13 +42,13 @@ export class TutorSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.provider === "openrouter") {
             new Setting(containerEl)
-                .setName("OpenRouter Model")
+                .setName("LLM Model")
                 .setDesc("Model to use for conversations")
                 .addText(text => text
-                    .setPlaceholder("anthropic/claude-3.5-sonnet")
-                    .setValue(this.plugin.settings.openrouterModel)
+                    .setPlaceholder("anthropic/claude-sonnet-4.5")
+                    .setValue(this.plugin.settings.model)
                     .onChange(async (value) => {
-                        this.plugin.settings.openrouterModel = value;
+                        this.plugin.settings.model = value;
                         await this.plugin.saveSettings();
                     }));
         }

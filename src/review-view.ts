@@ -10,7 +10,7 @@ export class ReviewView extends ItemView {
     private plugin: TutorPlugin;
     private topics: TopicCard[] = [];
     private currentTopicIndex = 0;
-    private conversation: { sender: string; content: string }[] = [];
+    private conversation: { sender: string; content: string; rawContent?: string }[] = [];
     private conversationEl: HTMLElement;
     private inputEl: HTMLTextAreaElement;
     private headerEl: HTMLElement;
@@ -69,11 +69,13 @@ export class ReviewView extends ItemView {
     }
 
     private initializeLLMProvider() {
-        const { provider, apiKey, openrouterModel } = this.plugin.settings;
-        if (provider === "openrouter") {
-            this.llmProvider = new OpenRouterProvider(apiKey, openrouterModel);
-        } else {
-            throw new Error("Unsupported provider: " + provider);
+        const { provider, apiKey, model } = this.plugin.settings;
+        switch (provider) {
+            case "openrouter":
+                this.llmProvider = new OpenRouterProvider(apiKey, model);
+                break
+            default:
+                throw new Error("Unsupported provider: " + provider);
         }
     }
 
@@ -205,45 +207,99 @@ export class ReviewView extends ItemView {
         }
     }
 
+    private parseXMLResponse(response: string): { message: string; rating: string | null } {
+        const messageMatch = response.match(/<message>([\s\S]*?)<\/message>/);
+        if (!messageMatch) {
+            throw new Error("No <message> tag found in response");
+        }
+
+        const ratingMatch = response.match(/<rating>([\s\S]*?)<\/rating>/);
+        if (!ratingMatch) {
+            throw new Error("No <rating> tag found in response");
+        }
+
+        const ratingValue = ratingMatch[1].trim();
+        const rating = ratingValue === "null" ? null : ratingValue;
+
+        return {
+            message: messageMatch[1].trim(),
+            rating: rating
+        };
+    }
+
     private getSystemPrompt() {
         const currentTopic = this.getCurrentTopic();
         if (!currentTopic) return;
 
         return `You are an adaptive learning tutor conducting spaced repetition reviews.
-Your goal is to assess a user's understanding through conversational questioning
-and build their knowledge through Socratic dialogue.
+Your goal is to assess understanding through conversational questioning while
+helping build knowledge through Socratic dialogue and targeted feedback.
 
 ## Context
-They're reviewing: "${currentTopic.name}" (last score: ${(currentTopic.score * 100).toFixed(0)}%)
 
-Their notes:
+${currentTopic.name}
+
 ${currentTopic.content}
 
-## Questioning & Scoring
-- 80-100%: Complex analysis, synthesis, critique, edge cases
-- 60-79%: Applications, real-world connections
-- 40-59%: Core concepts with examples/analogies
-- 20-39%: Simple definitions, build foundational understanding
-- 0-19%: Check prerequisites, recall basic facts, start ultra-basic
-- Scores reflect their understanding based on their responses only
+This is what they've been learning. Your questions should test understanding and
+reasoning ability - NOT recall of specific text.
 
-## Guidelines
-- Questions must be self-contained - don't assume users remember their notes exactly
-- Build understanding progressively - let them level up in future reviews
-- Be concise but thorough; stay focused on the given topic
-- End with a score when confident in your assessment (typically 4-8 exchanges)
+Last rating: ${currentTopic.rating || 'new'}
+
+## Approach
+
+This is formative assessment: you're testing AND teaching. Ask a question, evaluate
+their response, provide nudges when they miss something, and let them refine their
+understanding. The final rating reflects where they end up after your guidance.
+
+## Rating Levels & Question Difficulty
+
+again: Fundamental gaps, couldn't articulate basics even with scaffolding
+- Questions: Check prerequisites, recall basic facts, start with definitions
+
+hard: Partial understanding, needed significant guidance, missing key connections
+- Questions: Core concepts with examples/analogies, build foundational understanding
+
+good: Solid grasp with minor gaps, integrated nudges well, could explain most of it
+- Questions: Applications, real-world connections, relationships between concepts
+
+easy: Deep understanding, made connections independently, handled edge cases
+- Questions: Complex analysis, synthesis, critique, edge cases, novel applications
+
+Starting difficulty:
+- After Again/Hard: Start easier to rebuild foundations
+- After Good/Easy: Start harder to challenge them
+- New topic: Start with a broad, open question to gauge their level, then adapt
+
+## Rating Guidelines
+
+When deciding on a rating, consider:
+- Their initial response quality
+- How readily they integrated your nudges
+
+Someone who needed significant correction scores lower than someone who just
+needed a small prompt to complete their thinking.
+
+## Dialogue Guidelines
+
+- Questions must be self-contained
+- Be concise but thorough; stay focused on the topic
+- Correct misunderstandings directly when needed
+- End with a rating when confident (typically 4-8 exchanges)
 
 ## Response Format
-{
-  "text": "Question or explanation",
-  "score": <0.0-1.0 or null if continuing>
-}
 
-- Your response MUST BE valid JSON, no leading text or commentary
-- DO NOT wrap the response in a json code fence
-- Only the text field should be in Markdown, use LaTeX for math
+<tutor>
+  <message>Question, explanation, or feedback</message>
+  <rating>again | hard | good | easy | null</rating>
+</tutor>
 
-Start with one engaging question based on their score.`;
+- CRITICAL: The response MUST be in XML format
+- CRITICAL: There MUST be no text outside (before or after) the XML tags
+- The message field should be in Markdown; use LaTeX for math
+- Set rating to null while continuing dialogue, provide rating when done
+
+Start with one engaging question based on their last rating.`;
     }
 
     async callAI() {
@@ -256,32 +312,39 @@ Start with one engaging question based on their score.`;
 
             // Add conversation history
             for (const msg of this.conversation) {
-                const role = msg.sender === "AI" ? "assistant" : "user";
-                messages.push({ role, content: msg.content });
+                const role = msg.sender === "Tutor" ? "assistant" : "user";
+                const content = msg.rawContent || msg.content;
+                messages.push({ role, content });
             }
 
-            const response = await this.llmProvider.makeAPICall(messages);
+            const response = await this.llmProvider.complete(messages);
 
             try {
-                const parsed = JSON.parse(response);
+                const parsed = this.parseXMLResponse(response);
 
                 // Add tutor response to conversation
-                this.conversation.push({ sender: "Tutor", content: parsed.text });
-                await this.addMessageToUI("Tutor", parsed.text);
+                this.conversation.push({
+                    sender: "Tutor",
+                    content: parsed.message,
+                    rawContent: response.trim()
+                });
+                await this.addMessageToUI("Tutor", parsed.message);
 
-                // Check if tutor provided final score
-                if (parsed.score !== null) {
+                // Check if tutor provided final rating
+                if (parsed.rating !== null) {
                     const currentTopic = this.getCurrentTopic();
-                    await this.plugin.topicManager.updateTopicInNote(currentTopic!, parsed.score);
+                    const normalizedRating = parsed.rating.toLowerCase() as "again" | "hard" | "good" | "easy";
+                    await this.plugin.topicManager.updateTopicInNote(currentTopic!, normalizedRating);
 
                     // Show completion message
                     this.inputEl.disabled = true
                     await this.addMessageToUI("System", "✅ Review completed!");
                 }
-            } catch (e) {
+            } catch (parseError) {
                 this.inputEl.disabled = true
-                await this.addMessageToUI("System", "Error: Tutor did not return valid JSON: " + response)
+                await this.addMessageToUI("System", "Error: Tutor did not return valid XML: " + response);
             }
+
 
         } catch (error) {
             this.inputEl.disabled = true
@@ -326,7 +389,12 @@ Start with one engaging question based on their score.`;
         if (!message || this.isWaitingForAI) return;
 
         // Add user message to conversation
-        this.conversation.push({ sender: "You", content: message });
+        const rawUserMessage = `<student>\n  <message>${message}</message>\n</student>`;
+        this.conversation.push({
+            sender: "You",
+            content: message,
+            rawContent: rawUserMessage
+        });
         await this.addMessageToUI("You", message);
         this.inputEl.value = "";
 

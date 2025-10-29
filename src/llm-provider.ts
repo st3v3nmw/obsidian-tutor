@@ -1,5 +1,5 @@
 export interface LLMProvider {
-    makeAPICall(messages: any[]): Promise<string>;
+    complete(messages: any[]): Promise<string>;
 }
 
 export class OpenRouterProvider implements LLMProvider {
@@ -11,7 +11,7 @@ export class OpenRouterProvider implements LLMProvider {
         this.model = model;
     }
 
-    async makeAPICall(messages: any[]): Promise<string> {
+    async complete(messages: any[]): Promise<string> {
         if (!this.apiKey) {
             throw new Error("OpenRouter API key not configured");
         }
