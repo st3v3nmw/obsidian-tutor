@@ -1,4 +1,4 @@
-import { App, FrontMatterCache, getAllTags, Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import { Card, fsrs, Grade, Rating, State } from "ts-fsrs";
 
 import TutorPlugin from "src/main";
@@ -19,35 +19,57 @@ export class TopicManager {
         const files = this.app.vault.getMarkdownFiles();
 
         for (const file of files) {
-            const cache = this.app.metadataCache.getFileCache(file)!;
-            const tags = getAllTags(cache)!;
-
-            const hasTutorTag = tags.includes("#tutor");
-            if (!hasTutorTag) continue;
-
-            const fm = cache.frontmatter ?? {};
-            const nextReview = fm["tutor-next-review"] ? new Date(fm["tutor-next-review"]) : new Date();
-            const rating = (fm["tutor-rating"] as "again" | "hard" | "good" | "easy") || "new";
-            const interval = fm["tutor-interval"] ?? 1;
-            const stability = fm["tutor-stability"] ?? 2.5;
-            const difficulty = fm["tutor-difficulty"] ?? 5.0;
-            const reps = fm["tutor-reps"] ?? 0;
-
             const content = await this.app.vault.read(file);
+            const lines = content.split("\n");
 
-            topics.push(
-                {
-                    name: file.basename,
-                    file,
-                    content,
-                    nextReview,
-                    rating,
-                    interval,
-                    stability,
-                    difficulty,
-                    reps
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const topicMatch = line.match(/^>\s*\[!topic\]\s*(.+)$/);
+
+                if (topicMatch) {
+                    const topicName = topicMatch[1].trim();
+
+                    // Look for data comment on next line
+                    let nextReview = new Date();
+                    let rating: "again" | "hard" | "good" | "easy" = "good";
+                    let interval = 1;
+                    let stability = 2.5;
+                    let difficulty = 5.0;
+                    let reps = 0;
+
+                    if (i + 1 < lines.length) {
+                        const dataMatch = lines[i + 1].match(/^>\s*<!--(.+)-->$/);
+                        if (dataMatch) {
+                            const data = dataMatch[1].split(",");
+                            if (data.length === 6) {
+                                nextReview = new Date(data[0]);
+                                rating = data[1] as "again" | "hard" | "good" | "easy";
+                                interval = parseInt(data[2]);
+                                stability = parseFloat(data[3]);
+                                difficulty = parseFloat(data[4]);
+                                reps = parseInt(data[5]);
+                            }
+
+                            i++;
+                        }
+                    }
+
+                    // Use entire note as context - user can place callout anywhere
+                    const context = content;
+
+                    topics.push({
+                        name: topicName,
+                        file,
+                        content: context,
+                        nextReview,
+                        rating,
+                        interval,
+                        stability,
+                        difficulty,
+                        reps
+                    });
                 }
-            );
+            }
         }
 
         return topics;
@@ -87,17 +109,38 @@ export class TopicManager {
         const result = this.fsrsInstance.next(card, new Date(), grade);
         const newCard = result.card;
 
-        // Update frontmatter
-        await this.app.fileManager.processFrontMatter(topic.file, (frontmatter) => {
-            frontmatter["tutor-next-review"] = newCard.due.toISOString().split("T")[0];
-            frontmatter["tutor-rating"] = newRating;
-            frontmatter["tutor-interval"] = newCard.scheduled_days;
-            frontmatter["tutor-stability"] = parseFloat(newCard.stability.toFixed(1));
-            frontmatter["tutor-difficulty"] = parseFloat(newCard.difficulty.toFixed(1));
-            frontmatter["tutor-reps"] = newCard.reps;
-        });
+        // Update inline comment in file
+        const content = await this.app.vault.read(topic.file);
+        const lines = content.split("\n");
+        let updated = false;
 
-        const nextReviewDate = newCard.due.toISOString().split("T")[0];
-        new Notice(`Updated ${topic.name} - next review: ${nextReviewDate}`);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const topicMatch = line.match(/^>\s*\[!topic\]\s*(.+)$/);
+
+            if (topicMatch && topicMatch[1].trim() === topic.name) {
+                // Format: nextReview,rating,interval,stability,difficulty,reps
+                const dataComment = `> <!--${newCard.due.toISOString()},${newRating},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps}-->`;
+
+                // Check if next line is already a data comment
+                if (i + 1 < lines.length && lines[i + 1].match(/^>\s*<!--(.+)-->$/)) {
+                    lines[i + 1] = dataComment;
+                } else {
+                    // Insert new data comment
+                    lines.splice(i + 1, 0, dataComment);
+                }
+
+                updated = true;
+                break;
+            }
+        }
+
+        if (updated) {
+            await this.app.vault.modify(topic.file, lines.join("\n"));
+            const nextReviewDate = newCard.due.toISOString().split("T")[0];
+            new Notice(`Updated ${topic.name} - next review: ${nextReviewDate}`);
+        } else {
+            new Notice(`Error: Could not find topic "${topic.name}" in file`);
+        }
     }
 }
