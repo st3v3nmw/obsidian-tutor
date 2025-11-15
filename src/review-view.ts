@@ -178,6 +178,14 @@ export class ReviewView extends ItemView {
             attr: { style: "margin: 0 0 5px 0;" }
         });
 
+        // Add breadcrumb path
+        const pathParts = currentTopic.file.path.replace(/\.md$/, '').split('/');
+        const breadcrumb = pathParts.join(' > ');
+        titleEl.createEl("div", {
+            text: breadcrumb,
+            attr: { style: "color: var(--text-muted); font-size: 0.85em; margin-top: 2px;" }
+        });
+
         // Navigation controls
         const navEl = progressEl.createEl("div", {
             attr: { style: "display: flex; align-items: center; gap: 10px;" }
@@ -237,7 +245,9 @@ helping build knowledge through Socratic dialogue and targeted feedback.
 
 ## Context
 
-${currentTopic.name}
+Topic: ${currentTopic.name}
+
+Their notes:
 
 ${currentTopic.content}
 
@@ -298,8 +308,8 @@ needed a small prompt to complete their thinking.
 
 ## Dialogue Guidelines
 
-- Questions must be self-contained
-- Be concise but thorough; stay focused on the topic
+- Questions must be self-contained; stay focused on the topic "${currentTopic.name}"
+- Be concise but thorough
 - Correct misunderstandings directly when needed
 - End with a rating when confident (typically 4-8 exchanges)
 - Format your message in Markdown; use LaTeX for math
