@@ -7,7 +7,11 @@ import { Rating, TopicCard } from "src/types";
 export class TopicManager {
     private app: App;
     private plugin: TutorPlugin;
-    private fsrsInstance = fsrs();
+    private fsrsInstance = fsrs({
+      request_retention: 0.9,
+      enable_fuzz: true,
+      enable_short_term: false
+    });
 
     constructor(app: App, plugin: TutorPlugin) {
         this.app = app;
@@ -96,7 +100,7 @@ export class TopicManager {
             due: topic.nextReview,
             stability: topic.stability,
             difficulty: topic.difficulty,
-            elapsed_days: topic.interval,
+            elapsed_days: topic.interval, // TODO: Remove once dropped by FSRS
             scheduled_days: topic.interval,
             learning_steps: 0,
             reps: topic.reps,
@@ -114,13 +118,15 @@ export class TopicManager {
         const lines = content.split("\n");
         let updated = false;
 
+        const nextReviewDate = newCard.due.toISOString().split("T")[0];
+        const scheduledDays = Math.max(1, newCard.scheduled_days);
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             const topicMatch = line.match(/^>\s*\[!topic\]\s*(.+)$/);
 
             if (topicMatch && topicMatch[1].trim() === topic.name) {
                 // Format: nextReview,rating,interval,stability,difficulty,reps
-                const dataComment = `> <!--${newCard.due.toISOString()},${newRating},${newCard.scheduled_days},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps}-->`;
+                const dataComment = `> <!--${nextReviewDate},${newRating},${scheduledDays},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps}-->`;
 
                 // Check if next line is already a data comment
                 if (i + 1 < lines.length && lines[i + 1].match(/^>\s*<!--(.+)-->$/)) {
@@ -137,7 +143,6 @@ export class TopicManager {
 
         if (updated) {
             await this.app.vault.modify(topic.file, lines.join("\n"));
-            const nextReviewDate = newCard.due.toISOString().split("T")[0];
             new Notice(`Updated ${topic.name} - next review: ${nextReviewDate}`);
         } else {
             new Notice(`Error: Could not find topic "${topic.name}" in file`);
