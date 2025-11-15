@@ -1,5 +1,5 @@
 export interface LLMProvider {
-    complete(messages: any[]): Promise<string>;
+    complete(messages: any[], responseFormat?: any): Promise<string>;
 }
 
 export class OpenRouterProvider implements LLMProvider {
@@ -11,9 +11,18 @@ export class OpenRouterProvider implements LLMProvider {
         this.model = model;
     }
 
-    async complete(messages: any[]): Promise<string> {
+    async complete(messages: any[], responseFormat?: any): Promise<string> {
         if (!this.apiKey) {
             throw new Error("OpenRouter API key not configured");
+        }
+
+        const requestBody: any = {
+            model: this.model,
+            messages
+        };
+
+        if (responseFormat) {
+            requestBody.response_format = responseFormat;
         }
 
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -24,10 +33,7 @@ export class OpenRouterProvider implements LLMProvider {
                 "X-Title": "Obsidian Tutor",
                 "HTTP-Referer": "https://github.com/st3v3nmw/obsidian-tutor"
             },
-            body: JSON.stringify({
-                model: this.model,
-                messages
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {

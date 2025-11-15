@@ -1,8 +1,8 @@
 import { App, Notice } from "obsidian";
-import { Card, fsrs, Grade, Rating, State } from "ts-fsrs";
+import { Card, fsrs, Grade, Rating as FSRSRating, State } from "ts-fsrs";
 
 import TutorPlugin from "src/main";
-import { TopicCard } from "src/types";
+import { Rating, TopicCard } from "src/types";
 
 export class TopicManager {
     private app: App;
@@ -31,7 +31,7 @@ export class TopicManager {
 
                     // Look for data comment on next line
                     let nextReview = new Date();
-                    let rating: "again" | "hard" | "good" | "easy" = "good";
+                    let rating: Rating | undefined = undefined;
                     let interval = 1;
                     let stability = 2.5;
                     let difficulty = 5.0;
@@ -43,7 +43,7 @@ export class TopicManager {
                             const data = dataMatch[1].split(",");
                             if (data.length === 6) {
                                 nextReview = new Date(data[0]);
-                                rating = data[1] as "again" | "hard" | "good" | "easy";
+                                rating = data[1] as Rating;
                                 interval = parseInt(data[2]);
                                 stability = parseFloat(data[3]);
                                 difficulty = parseFloat(data[4]);
@@ -81,16 +81,16 @@ export class TopicManager {
         return allTopics.filter(topic => topic.nextReview <= now);
     }
 
-    mapRatingToGrade(rating: "again" | "hard" | "good" | "easy"): Grade {
+    mapRatingToFSRSRating(rating: Rating): Grade {
         switch (rating) {
-            case "again": return Rating.Again;
-            case "hard": return Rating.Hard;
-            case "good": return Rating.Good;
-            case "easy": return Rating.Easy;
+            case "again": return FSRSRating.Again;
+            case "hard": return FSRSRating.Hard;
+            case "good": return FSRSRating.Good;
+            case "easy": return FSRSRating.Easy;
         }
     }
 
-    async updateTopicInNote(topic: TopicCard, newRating: "again" | "hard" | "good" | "easy") {
+    async updateTopicInNote(topic: TopicCard, newRating: Rating) {
         // Create FSRS card from current state
         const card: Card = {
             due: topic.nextReview,
@@ -101,11 +101,11 @@ export class TopicManager {
             learning_steps: 0,
             reps: topic.reps,
             lapses: 0,
-            state: State.Review
+            state: topic.reps === 0 ? State.New : State.Review
         };
 
         // Get new card state from FSRS
-        const grade = this.mapRatingToGrade(newRating);
+        const grade = this.mapRatingToFSRSRating(newRating);
         const result = this.fsrsInstance.next(card, new Date(), grade);
         const newCard = result.card;
 

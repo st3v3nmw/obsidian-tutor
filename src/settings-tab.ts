@@ -43,7 +43,7 @@ export class TutorSettingTab extends PluginSettingTab {
         if (this.plugin.settings.provider === "openrouter") {
             new Setting(containerEl)
                 .setName("LLM Model")
-                .setDesc("Model to use for conversations")
+                .setDesc("Model to use for conversations (must support structured outputs)")
                 .addText(text => text
                     .setPlaceholder("anthropic/claude-sonnet-4.5")
                     .setValue(this.plugin.settings.model)

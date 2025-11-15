@@ -9,7 +9,7 @@
 Mark topics in your notes using:
 
 ```markdown
-> [!topic] title
+> [!topic] Title
 ```
 
 The plugin will automatically track and schedule reviews for these topics.

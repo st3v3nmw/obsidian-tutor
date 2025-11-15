@@ -2,9 +2,32 @@ import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
 
 import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
-import { TopicCard } from "src/types";
+import { Rating, TopicCard } from "src/types";
 
 export const VIEW_TYPE_REVIEW = "tutor-review";
+
+const TUTOR_RESPONSE_SCHEMA = {
+    type: "json_schema",
+    json_schema: {
+        name: "tutor",
+        strict: true,
+        schema: {
+            type: "object",
+            properties: {
+                message: {
+                    type: "string",
+                    description: "Question, explanation, or feedback in Markdown format. Use LaTeX for math."
+                },
+                rating: {
+                    enum: ["again", "hard", "good", "easy", null],
+                    description: "Spaced repetition rating, or null to continue dialogue"
+                }
+            },
+            required: ["message", "rating"],
+            additionalProperties: false
+        }
+    }
+};
 
 export class ReviewView extends ItemView {
     private plugin: TutorPlugin;
@@ -79,9 +102,7 @@ export class ReviewView extends ItemView {
         }
     }
 
-    async onOpen() {
-        // Initial render will happen in setState
-    }
+    async onOpen() {}
 
     async render() {
         const container = this.containerEl.children[1];
@@ -136,7 +157,6 @@ export class ReviewView extends ItemView {
             }
         });
 
-        // Make container flex
         container.setAttribute("style", "display: flex; flex-direction: column; height: 100%;");
     }
 
@@ -177,7 +197,7 @@ export class ReviewView extends ItemView {
 
         this.nextBtn.onclick = () => this.nextTopic();
 
-        // Disable if waiting for AI or if it"s the last topic and not finished
+        // Disable if waiting for AI or if it's the last topic and not finished
         this.updateNextButton();
     }
 
@@ -202,30 +222,10 @@ export class ReviewView extends ItemView {
 
             await this.callAI();
         } else {
-            // Finished all topics
             await this.addMessageToUI("System", "🎉 All topics reviewed! Great job!");
         }
     }
 
-    private parseXMLResponse(response: string): { message: string; rating: string | null } {
-        const messageMatch = response.match(/<message>([\s\S]*?)<\/message>/);
-        if (!messageMatch) {
-            throw new Error("No <message> tag found in response");
-        }
-
-        const ratingMatch = response.match(/<rating>([\s\S]*?)<\/rating>/);
-        if (!ratingMatch) {
-            throw new Error("No <rating> tag found in response");
-        }
-
-        const ratingValue = ratingMatch[1].trim();
-        const rating = ratingValue === "null" ? null : ratingValue;
-
-        return {
-            message: messageMatch[1].trim(),
-            rating: rating
-        };
-    }
 
     private getSystemPrompt() {
         const currentTopic = this.getCurrentTopic();
@@ -244,7 +244,7 @@ ${currentTopic.content}
 This is what they've been learning. Your questions should test understanding and
 reasoning ability - NOT recall of specific text.
 
-Last rating: ${currentTopic.rating || 'new'}
+Last rating: ${currentTopic.rating ?? 'new'}
 
 ## Approach
 
@@ -302,18 +302,8 @@ needed a small prompt to complete their thinking.
 - Be concise but thorough; stay focused on the topic
 - Correct misunderstandings directly when needed
 - End with a rating when confident (typically 4-8 exchanges)
-
-## Response Format
-
-<tutor>
-  <message>Question, explanation, or feedback</message>
-  <rating>again | hard | good | easy | null</rating>
-</tutor>
-
-- CRITICAL: The response MUST be in XML format
-- CRITICAL: There MUST be no text outside (before or after) the XML tags
-- The message field should be in Markdown; use LaTeX for math
-- Set rating to null while continuing dialogue, provide rating when done
+- Format your message in Markdown; use LaTeX for math
+- Set rating to null while continuing dialogue, provide a rating when done
 
 Start with one engaging question based on their last rating.`;
     }
@@ -333,34 +323,27 @@ Start with one engaging question based on their last rating.`;
                 messages.push({ role, content });
             }
 
-            const response = await this.llmProvider.complete(messages);
+            const response = await this.llmProvider.complete(messages, TUTOR_RESPONSE_SCHEMA);
+            const parsed = JSON.parse(response);
 
-            try {
-                const parsed = this.parseXMLResponse(response);
+            // Add tutor response to conversation
+            this.conversation.push({
+                sender: "Tutor",
+                content: parsed.message,
+                rawContent: response.trim()
+            });
+            await this.addMessageToUI("Tutor", parsed.message);
 
-                // Add tutor response to conversation
-                this.conversation.push({
-                    sender: "Tutor",
-                    content: parsed.message,
-                    rawContent: response.trim()
-                });
-                await this.addMessageToUI("Tutor", parsed.message);
+            // Check if tutor provided final rating
+            if (parsed.rating !== null) {
+                const currentTopic = this.getCurrentTopic();
+                const normalizedRating = parsed.rating.toLowerCase() as Rating;
+                await this.plugin.topicManager.updateTopicInNote(currentTopic!, normalizedRating);
 
-                // Check if tutor provided final rating
-                if (parsed.rating !== null) {
-                    const currentTopic = this.getCurrentTopic();
-                    const normalizedRating = parsed.rating.toLowerCase() as "again" | "hard" | "good" | "easy";
-                    await this.plugin.topicManager.updateTopicInNote(currentTopic!, normalizedRating);
-
-                    // Show completion message
-                    this.inputEl.disabled = true
-                    await this.addMessageToUI("System", "✅ Review completed!");
-                }
-            } catch (parseError) {
+                // Show completion message
                 this.inputEl.disabled = true
-                await this.addMessageToUI("System", "Error: Tutor did not return valid XML: " + response);
+                await this.addMessageToUI("System", "✅ Review completed!");
             }
-
 
         } catch (error) {
             this.inputEl.disabled = true
@@ -418,7 +401,5 @@ Start with one engaging question based on their last rating.`;
         await this.callAI();
     }
 
-    async onClose() {
-        // Cleanup if needed
-    }
+    async onClose() {}
 }

@@ -42,9 +42,9 @@ export default class TutorPlugin extends Plugin {
             name: "Insert Topic Callout",
             editorCallback(editor, ctx) {
                 const cursor = editor.getCursor();
-                editor.replaceSelection("> [!topic] title\n");
+                editor.replaceSelection("> [!topic] Title\n");
                 editor.setSelection(
-                    // start to end of "title"
+                    // start to end of "Title"
                     { line: cursor.line, ch: cursor.ch + 11 },
                     { line: cursor.line, ch: cursor.ch + 16 }
                 );
