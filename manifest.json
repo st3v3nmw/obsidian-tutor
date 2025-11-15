@@ -1,8 +1,8 @@
 {
 	"id": "obsidian-tutor",
 	"name": "Tutor",
-	"version": "1.2.1",
-	"minAppVersion": "0.15.0",
+	"version": "1.2.2",
+	"minAppVersion": "1.10.0",
 	"description": "Your notes become your tutor!",
 	"author": "Stephen Mwangi",
 	"authorUrl": "https://github.com/st3v3nmw",

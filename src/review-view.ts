@@ -51,8 +51,7 @@ export class ReviewView extends ItemView {
     }
 
     getDisplayText() {
-        const currentTopic = this.topics[this.currentTopicIndex];
-        return currentTopic ? currentTopic.file.basename : "Tutor";
+        return "Tutor";
     }
 
     getIcon() {
