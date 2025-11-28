@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownRenderer, Platform, WorkspaceLeaf } from "obsidian";
 
 import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
@@ -149,12 +149,16 @@ export class ReviewView extends ItemView {
         });
         sendBtn.onclick = () => this.sendMessage();
 
-        this.inputEl.addEventListener("keypress", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                this.sendMessage();
-            }
-        });
+        // Desktop only: Enter = send, Shift+Enter = newline
+        // Mobile: Enter = newline, tap send button
+        if (Platform.isDesktop) {
+            this.inputEl.addEventListener("keypress", (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+        }
 
         container.setAttribute("style", "display: flex; flex-direction: column; height: 100%;");
     }

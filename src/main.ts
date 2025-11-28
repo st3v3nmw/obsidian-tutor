@@ -77,6 +77,9 @@ export default class TutorPlugin extends Plugin {
             return;
         }
 
+        // Randomize order
+        dueTopics.sort(() => Math.random() - 0.5);
+
         // Check if the review view is already open
         let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
 
