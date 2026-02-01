@@ -36,6 +36,7 @@ export class ReviewView extends ItemView {
     private conversation: { sender: string; content: string }[] = [];
     private conversationEl: HTMLElement;
     private inputEl: HTMLTextAreaElement;
+    private sendBtn: HTMLButtonElement;
     private isWaitingForAI = false;
     private llmProvider: LLMProvider;
 
@@ -118,8 +119,7 @@ export class ReviewView extends ItemView {
         const inputContainer = container.createEl("div", { cls: "tutor-input-area" });
 
         this.inputEl = inputContainer.createEl("textarea", {
-            placeholder: "Type your response...",
-            attr: { rows: 1 }
+            attr: { rows: 1, placeholder: "Reply\u2026" }
         });
 
         this.inputEl.addEventListener("input", () => {
@@ -127,9 +127,9 @@ export class ReviewView extends ItemView {
             this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 150) + "px";
         });
 
-        const sendBtn = inputContainer.createEl("button", { cls: "tutor-send-btn clickable-icon" });
-        setIcon(sendBtn, "arrow-up");
-        sendBtn.onclick = () => this.sendMessage();
+        this.sendBtn = inputContainer.createEl("button", { cls: "tutor-send-btn clickable-icon" });
+        setIcon(this.sendBtn, "arrow-up");
+        this.sendBtn.onclick = () => this.sendMessage();
 
         // Desktop only: Enter = send, Shift+Enter = newline
         // Mobile: Enter = newline, tap send button
@@ -145,18 +145,25 @@ export class ReviewView extends ItemView {
         container.addClass("tutor-container");
     }
 
+    private setInputEnabled(enabled: boolean) {
+        this.inputEl.disabled = !enabled;
+        this.sendBtn.disabled = !enabled;
+    }
+
     private async advanceToNextTopic() {
         this.currentTopicIndex++;
         this.conversation = [];
-        this.inputEl.disabled = false;
         await this.startTopicReview();
     }
 
     private async startTopicReview() {
+        this.setInputEnabled(false);
         this.addTopicSeparator(this.getCurrentTopic()!);
         const result = await this.fetchTutorResponse();
         if (result && result.rating !== null) {
             await this.saveRatingAndAdvance(result.rating);
+        } else if (result) {
+            this.setInputEnabled(true);
         }
     }
 
@@ -174,7 +181,10 @@ Topic: ${currentTopic.name}
 Their notes:
 ${currentTopic.content}
 
-Test understanding and reasoning, not recall of specific text.
+Don't reference what's in their notes or ask them to recall specific points
+from the notes. Test whether they understand the concept, not whether they
+remember what they wrote.
+
 Last rating: ${currentTopic.rating ?? 'new'}
 
 ## Question Difficulty
@@ -254,7 +264,7 @@ take their answer as final - it's what they gave you.`;
 
             return { message: parsed.message, rating: parsed.rating?.toLowerCase() as Rating ?? null };
         } catch (error) {
-            this.inputEl.disabled = true;
+            this.setInputEnabled(false);
             this.addErrorToUI("Error: " + error.message);
             return null;
         }
@@ -263,11 +273,14 @@ take their answer as final - it's what they gave you.`;
     private async handleTurn() {
         if (this.isWaitingForAI) return;
         this.isWaitingForAI = true;
+        this.setInputEnabled(false);
 
         try {
             const result = await this.fetchTutorResponse();
             if (result && result.rating !== null) {
                 await this.saveRatingAndAdvance(result.rating);
+            } else if (result) {
+                this.setInputEnabled(true);
             }
         } finally {
             this.isWaitingForAI = false;
@@ -281,8 +294,8 @@ take their answer as final - it's what they gave you.`;
         if (this.currentTopicIndex < this.topics.length - 1) {
             await this.advanceToNextTopic();
         } else {
-            this.inputEl.disabled = true;
-            await this.addMessageToUI("Tutor", "That's everything for today. Good work.");
+            this.setInputEnabled(false);
+            await this.addMessageToUI("Tutor", "That's everything for today. Good work!");
         }
     }
 
@@ -333,6 +346,7 @@ take their answer as final - it's what they gave you.`;
         });
         await this.addMessageToUI("You", message);
         this.inputEl.value = "";
+        this.inputEl.style.height = "";
 
         // Get AI response
         await this.handleTurn();
