@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, Platform, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownRenderer, Platform, setIcon, WorkspaceLeaf } from "obsidian";
 
 import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
@@ -20,7 +20,7 @@ const TUTOR_RESPONSE_SCHEMA = {
                 },
                 rating: {
                     enum: ["again", "hard", "good", "easy", null],
-                    description: "Spaced repetition rating, or null to continue dialogue"
+                    description: "Spaced repetition rating, or null to continue dialogue."
                 }
             },
             required: ["message", "rating"],
@@ -33,11 +33,9 @@ export class ReviewView extends ItemView {
     private plugin: TutorPlugin;
     private topics: TopicCard[] = [];
     private currentTopicIndex = 0;
-    private conversation: { sender: string; content: string; rawContent?: string }[] = [];
+    private conversation: { sender: string; content: string }[] = [];
     private conversationEl: HTMLElement;
     private inputEl: HTMLTextAreaElement;
-    private headerEl: HTMLElement;
-    private nextBtn: HTMLButtonElement;
     private isWaitingForAI = false;
     private llmProvider: LLMProvider;
 
@@ -75,7 +73,7 @@ export class ReviewView extends ItemView {
 
         this.initializeLLMProvider();
         if (this.getCurrentTopic()) {
-            await this.callAI();
+            await this.startTopicReview();
         }
     }
 
@@ -113,40 +111,24 @@ export class ReviewView extends ItemView {
             return;
         }
 
-        // Header
-        this.headerEl = container.createEl("div", {
-            attr: { style: "padding: 20px; border-bottom: 1px solid var(--background-modifier-border);" }
-        });
-
-        this.updateHeader();
-
         // Conversation area
-        this.conversationEl = container.createEl("div", {
-            cls: "tutor-conversation",
-            attr: {
-                style: "flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px;"
-            }
-        });
+        this.conversationEl = container.createEl("div", { cls: "tutor-conversation" });
 
         // Input area
-        const inputContainer = container.createEl("div", {
-            attr: {
-                style: "padding: 20px; border-top: 1px solid var(--background-modifier-border); display: flex; align-items: flex-end; gap: 10px;"
-            }
-        });
+        const inputContainer = container.createEl("div", { cls: "tutor-input-area" });
 
         this.inputEl = inputContainer.createEl("textarea", {
             placeholder: "Type your response...",
-            attr: {
-                rows: 4,
-                style: "flex: 1; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 4px;",
-            }
+            attr: { rows: 1 }
         });
 
-        const sendBtn = inputContainer.createEl("button", {
-            text: "Send",
-            attr: { style: "padding: 8px 16px; border-radius: 4px;" }
+        this.inputEl.addEventListener("input", () => {
+            this.inputEl.style.height = "auto";
+            this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 150) + "px";
         });
+
+        const sendBtn = inputContainer.createEl("button", { cls: "tutor-send-btn clickable-icon" });
+        setIcon(sendBtn, "arrow-up");
         sendBtn.onclick = () => this.sendMessage();
 
         // Desktop only: Enter = send, Shift+Enter = newline
@@ -160,225 +142,164 @@ export class ReviewView extends ItemView {
             });
         }
 
-        container.setAttribute("style", "display: flex; flex-direction: column; height: 100%;");
+        container.addClass("tutor-container");
     }
 
-    private updateHeader() {
-        if (!this.headerEl) return;
-
-        this.headerEl.empty();
-        const currentTopic = this.getCurrentTopic();
-        if (!currentTopic) return;
-
-        // Progress and title
-        const progressEl = this.headerEl.createEl("div", {
-            attr: { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;" }
-        });
-
-        const titleEl = progressEl.createEl("div");
-        titleEl.createEl("h2", {
-            text: `${currentTopic.name}`,
-            attr: { style: "margin: 0 0 5px 0;" }
-        });
-
-        // Add breadcrumb path
-        const pathParts = currentTopic.file.path.replace(/\.md$/, '').split('/');
-        const breadcrumb = pathParts.join(' > ');
-        titleEl.createEl("div", {
-            text: breadcrumb,
-            attr: { style: "color: var(--text-muted); font-size: 0.85em; margin-top: 2px;" }
-        });
-
-        // Navigation controls
-        const navEl = progressEl.createEl("div", {
-            attr: { style: "display: flex; align-items: center; gap: 10px;" }
-        });
-
-        // Progress indicator
-        navEl.createEl("span", {
-            text: `${this.currentTopicIndex + 1} of ${this.topics.length}`,
-            attr: { style: "color: var(--text-muted); font-size: 0.9em;" }
-        });
-
-        // Next button
-        this.nextBtn = navEl.createEl("button", {
-            text: this.currentTopicIndex < this.topics.length - 1 ? "Next Topic" : "Finish",
-            attr: { style: "padding: 6px 12px; border-radius: 4px; font-size: 0.9em;" }
-        });
-
-        this.nextBtn.onclick = () => this.nextTopic();
-
-        // Disable if waiting for AI or if it's the last topic and not finished
-        this.updateNextButton();
+    private async advanceToNextTopic() {
+        this.currentTopicIndex++;
+        this.conversation = [];
+        this.inputEl.disabled = false;
+        await this.startTopicReview();
     }
 
-    private updateNextButton() {
-        if (!this.nextBtn) return;
-
-        // Enable if waiting for AI to prevent spam
-        this.nextBtn.disabled = this.isWaitingForAI;
-
-        if (this.currentTopicIndex >= this.topics.length - 1) {
-            this.nextBtn.textContent = "Finish";
+    private async startTopicReview() {
+        this.addTopicSeparator(this.getCurrentTopic()!);
+        const result = await this.fetchTutorResponse();
+        if (result && result.rating !== null) {
+            await this.saveRatingAndAdvance(result.rating);
         }
     }
-
-    private async nextTopic() {
-        if (this.currentTopicIndex < this.topics.length - 1) {
-            this.currentTopicIndex++;
-            this.conversation = [];
-            this.conversationEl.empty();
-            this.inputEl.disabled = false
-            this.updateHeader();
-
-            await this.callAI();
-        } else {
-            await this.addMessageToUI("System", "🎉 All topics reviewed! Great job!");
-        }
-    }
-
 
     private getSystemPrompt() {
         const currentTopic = this.getCurrentTopic();
         if (!currentTopic) return;
 
-        return `You are an adaptive learning tutor conducting spaced repetition reviews.
-Your goal is to assess understanding through a single focused exchange:
-one question, one answer, one response that corrects, teaches, and rates.
+        return `You are conducting a spaced repetition review.
+Keep the interaction quick: ask one focused question, get their answer,
+then give one complete assessment.
 
 ## Context
 
 Topic: ${currentTopic.name}
-
 Their notes:
-
 ${currentTopic.content}
 
-Your questions should test understanding and reasoning ability, not recall
-of specific text.
-
+Test understanding and reasoning, not recall of specific text.
 Last rating: ${currentTopic.rating ?? 'new'}
-
-## Format
-
-1. Ask one well-chosen question
-2. After they answer, respond with:
-   - Direct assessment of what they got right and wrong
-   - Clear explanation of anything they missed or got fuzzy, teaching the
-      correct mental model
-   - A rating
-
-One exchange. No follow-ups. Your single response after their answer must
-do all the teaching and correcting in one shot.
 
 ## Question Difficulty
 
-Choose question difficulty based on their last rating:
-- After Again/Hard: Ask an easier question. Check prerequisites, basic
-  definitions, fundamental mechanisms.
-- After Good/Easy: Ask a harder question. Applications, edge cases, synthesis,
-  novel connections.
+Ask ONE focused question per review to test one concept or connection,
+NOT multi-part scenarios.
+
+- After Again/Hard: Easier question. Test prerequisites or fundamentals.
+- After Good/Easy: Harder question. Applications, edge cases, novel connections.
 - New topic: Gauge-level question that reveals depth of understanding.
 
-## Critical Assessment
+## Assessment
 
-Don't accept vague or incomplete answers. In your response:
+Don't accept vague answers. In your response:
+- State what's correct in their answer, then what needs correction
+- When their answer reveals a misconception, show the gap between
+  their mental model and the correct one
+- Teach what they missed - give them the actual mental model, not just the fact
+- Call out buzzwords used without clear explanations
+- Rate their understanding
 
-- Call out buzzwords used without explaining mechanisms
-- Correct unsupported claims or hand-waved details
-- Fill in key nuances, trade-offs, or edge cases they missed
-- Point out contradictions or fuzzy thinking
+A "good" rating means they explained the reasoning, not just stated the
+conclusion. They should show why something is true or how it works, not
+just that it is.
 
-A "good" rating means they demonstrated clear reasoning, not that they
-were in the right ballpark.
-
-## Rating Levels
+## Ratings
 
 again: Fundamental gaps, couldn't articulate basics
 hard: Partial understanding, missing key connections
-good: Solid grasp with minor gaps, could explain most of it clearly
+good: Solid grasp with minor gaps, explained it clearly
 easy: Deep understanding, handled edge cases, made connections independently
 
-## Rating Guidelines
+Rate based only on what they demonstrated in their answer.
 
-Rate based on their answer as given. Don't give credit for what they
-might know - only for what they demonstrated. Be honest but not punitive.
+## Writing Style
 
-## Response Guidelines
+Write like a knowledgeable peer, not documentation. Be direct. Skip:
+- Metacommentary about their answer or your teaching ("you've nailed",
+  "here's the key point", "the insight you demonstrated")
+- Preambles explaining what you're about to do
+- Summarizing what you just said
+- Bullet points unless they genuinely clarify structure
 
-- Questions must be self-contained; stay focused on the topic "${currentTopic.name}"
-- Be concise but thorough in corrections
-- When teaching, give them the mental model, not just the fact
-- Format in Markdown; use LaTeX for math
-- Always provide a rating in your response`;
+Be concise but complete. Teach what's necessary to correct their
+understanding, then stop. Don't elaborate beyond the gap or pose
+follow-up questions.
+
+Don't use em-dashes.
+Format in Markdown; use LaTeX for math.
+
+The question must be self-contained and focused on "${currentTopic.name}".
+Ask exactly one question. Not multiple questions, not "part A/B", not
+"first X, then Y". One question.
+
+Grade immediately after they give you a response, DO NOT ask follow-ups,
+take their answer as final - it's what they gave you.`;
     }
 
-    async callAI() {
-        if (this.isWaitingForAI) return;
-        this.isWaitingForAI = true;
-        this.updateNextButton();
-
+    private async fetchTutorResponse(): Promise<{ message: string; rating: Rating | null } | null> {
         try {
             const messages = [{ role: "system", content: this.getSystemPrompt() }];
 
-            // Add conversation history
             for (const msg of this.conversation) {
                 const role = msg.sender === "Tutor" ? "assistant" : "user";
-                const content = msg.rawContent || msg.content;
+                const content = msg.content;
                 messages.push({ role, content });
             }
 
             const response = await this.llmProvider.complete(messages, TUTOR_RESPONSE_SCHEMA);
             const parsed = JSON.parse(response);
 
-            // Add tutor response to conversation
             this.conversation.push({
                 sender: "Tutor",
                 content: parsed.message,
-                rawContent: response.trim()
             });
             await this.addMessageToUI("Tutor", parsed.message);
 
-            // Check if tutor provided final rating
-            if (parsed.rating !== null) {
-                const currentTopic = this.getCurrentTopic();
-                const normalizedRating = parsed.rating.toLowerCase() as Rating;
-                await this.plugin.topicManager.updateTopicInNote(currentTopic!, normalizedRating);
-
-                // Show completion message
-                this.inputEl.disabled = true
-                await this.addMessageToUI("System", "✅ Review completed!");
-            }
-
+            return { message: parsed.message, rating: parsed.rating?.toLowerCase() as Rating ?? null };
         } catch (error) {
-            this.inputEl.disabled = true
-            await this.addMessageToUI("System", "Error: " + error.message);
+            this.inputEl.disabled = true;
+            this.addErrorToUI("Error: " + error.message);
+            return null;
         }
-
-        this.isWaitingForAI = false;
-        this.updateNextButton();
     }
 
-    async addMessageToUI(sender: string, content: string) {
-        const messageEl = this.conversationEl.createEl("div", {
-            attr: {
-                style: `padding: 15px; border-radius: 8px; max-width: 80%; ${sender === "You"
-                    ? "background: var(--interactive-accent); color: var(--text-on-accent); align-self: flex-end; margin-left: auto;"
-                    : sender === "System"
-                        ? "background: var(--background-modifier-border); color: var(--text-muted); align-self: center; text-align: center; font-style: italic;"
-                        : "background: var(--background-modifier-form-field); align-self: flex-start;"
-                    }`
-            }
-        });
+    private async handleTurn() {
+        if (this.isWaitingForAI) return;
+        this.isWaitingForAI = true;
 
-        if (sender !== "System") {
-            messageEl.createEl("div", {
-                text: sender,
-                attr: {
-                    style: "font-weight: bold; margin-bottom: 8px; font-size: 0.9em; opacity: 0.8;"
-                }
-            });
+        try {
+            const result = await this.fetchTutorResponse();
+            if (result && result.rating !== null) {
+                await this.saveRatingAndAdvance(result.rating);
+            }
+        } finally {
+            this.isWaitingForAI = false;
         }
+    }
+
+    private async saveRatingAndAdvance(rating: Rating) {
+        const currentTopic = this.getCurrentTopic();
+        await this.plugin.topicManager.updateTopicInNote(currentTopic!, rating);
+
+        if (this.currentTopicIndex < this.topics.length - 1) {
+            await this.advanceToNextTopic();
+        } else {
+            this.inputEl.disabled = true;
+            await this.addMessageToUI("Tutor", "That's everything for today. Good work.");
+        }
+    }
+
+    async addMessageToUI(sender: "You" | "Tutor", content: string) {
+        const cls = sender === "You" ? "tutor-message tutor-message--user" : "tutor-message tutor-message--tutor";
+        const messageEl = this.conversationEl.createEl("div", { cls });
+
+        const headerEl = messageEl.createEl("div", { cls: "tutor-message-header" });
+        headerEl.createEl("span", { text: sender, cls: "tutor-message-sender" });
+
+        const copyBtn = headerEl.createEl("button", { cls: "tutor-copy-btn clickable-icon" });
+        setIcon(copyBtn, "copy");
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(content);
+            setIcon(copyBtn, "check");
+            setTimeout(() => setIcon(copyBtn, "copy"), 1500);
+        };
 
         // Render message
         const contentEl = messageEl.createEl("div");
@@ -388,22 +309,33 @@ might know - only for what they demonstrated. Be honest but not punitive.
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
     }
 
+    private addErrorToUI(message: string) {
+        this.conversationEl.createEl("div", { text: message, cls: "tutor-error" });
+        this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
+    }
+
+    private addTopicSeparator(topic: TopicCard) {
+        this.conversationEl.createEl("div", { cls: "tutor-separator" }, (el) => {
+            el.createEl("div", { cls: "tutor-separator-line" });
+            el.createEl("span", { text: topic.name });
+            el.createEl("div", { cls: "tutor-separator-line" });
+        });
+    }
+
     async sendMessage() {
         const message = this.inputEl.value.trim();
         if (!message || this.isWaitingForAI) return;
 
         // Add user message to conversation
-        const rawUserMessage = `<student>\n  <message>${message}</message>\n</student>`;
         this.conversation.push({
             sender: "You",
             content: message,
-            rawContent: rawUserMessage
         });
         await this.addMessageToUI("You", message);
         this.inputEl.value = "";
 
         // Get AI response
-        await this.callAI();
+        await this.handleTurn();
     }
 
     async onClose() {}
