@@ -6,10 +6,11 @@
 
 ### Usage
 
-Mark topics in your notes using:
+Add cards to your notes using:
 
 ```markdown
-> [!topic] Title
+> [!card] Question
+> Answer
 ```
 
-The plugin will automatically track and schedule reviews for these topics.
+The plugin schedules reviews with FSRS and grades your answers using an LLM via OpenRouter.
