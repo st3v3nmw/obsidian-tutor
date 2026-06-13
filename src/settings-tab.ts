@@ -17,40 +17,25 @@ export class TutorSettingTab extends PluginSettingTab {
         containerEl.createEl("h2", { text: "Tutor Settings" });
 
         new Setting(containerEl)
-            .setName("AI Provider")
-            .setDesc("Choose your AI provider")
-            .addDropdown(dropdown => dropdown
-                .addOption("openrouter", "OpenRouter")
-                .addOption("claude", "Claude (Coming Soon)")
-                .setValue(this.plugin.settings.provider)
-                .onChange(async (value: "openrouter") => {
-                    this.plugin.settings.provider = value;
-                    await this.plugin.saveSettings();
-                    this.display();
-                }));
-
-        new Setting(containerEl)
-            .setName("API Key")
-            .setDesc(`Your ${this.plugin.settings.provider} API key`)
+            .setName("OpenRouter API Key")
+            .setDesc("Your OpenRouter API key")
             .addText(text => text
-                .setPlaceholder("sk-...")
+                .setPlaceholder("sk-or-...")
                 .setValue(this.plugin.settings.apiKey)
                 .onChange(async (value) => {
                     this.plugin.settings.apiKey = value;
                     await this.plugin.saveSettings();
                 }));
 
-        if (this.plugin.settings.provider === "openrouter") {
-            new Setting(containerEl)
-                .setName("LLM Model")
-                .setDesc("Model to use for conversations (must support structured outputs)")
-                .addText(text => text
-                    .setPlaceholder("anthropic/claude-sonnet-4.5")
-                    .setValue(this.plugin.settings.model)
-                    .onChange(async (value) => {
-                        this.plugin.settings.model = value;
-                        await this.plugin.saveSettings();
-                    }));
-        }
+        new Setting(containerEl)
+            .setName("Model")
+            .setDesc("Model to use for review sessions (must support structured outputs)")
+            .addText(text => text
+                .setPlaceholder("anthropic/claude-sonnet-4-6")
+                .setValue(this.plugin.settings.model)
+                .onChange(async (value) => {
+                    this.plugin.settings.model = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 }

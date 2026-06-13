@@ -1,57 +1,85 @@
 import { Plugin, Notice } from "obsidian";
 
+import { StatsModal } from "src/stats-modal";
+
+import { CardManager } from "src/card-manager";
 import { ReviewView, VIEW_TYPE_REVIEW } from "src/review-view";
 import { DEFAULT_SETTINGS, TutorSettings } from "src/settings";
 import { TutorSettingTab } from "src/settings-tab";
-import { TopicManager } from "src/topic-manager";
+import { ReviewCard } from "src/types";
 
 export default class TutorPlugin extends Plugin {
     settings: TutorSettings;
-    topicManager: TopicManager;
+    cardManager: CardManager;
 
     async onload() {
         await this.loadSettings();
-        this.topicManager = new TopicManager(this.app, this);
+        this.cardManager = new CardManager(this.app, this);
 
-        // Views
-        this.registerView(
-            VIEW_TYPE_REVIEW,
-            (leaf) => new ReviewView(leaf, this)
-        );
+        this.registerView(VIEW_TYPE_REVIEW, (leaf) => new ReviewView(leaf, this));
 
-        // Ribbon Icons
-        this.addRibbonIcon("brain-circuit", "Start Review Session", () => {
-            this.startReviewSession();
+        this.registerMarkdownPostProcessor((el) => {
+            el.querySelectorAll<HTMLElement>('span.tutor-state').forEach((span) => {
+                const parts = (span.textContent ?? "").trim().split(",");
+                if (parts.length < 6) return;
+
+                const [dueStr, , intervalStr, stabilityStr, difficultyStr] = parts;
+                const due = new Date(dueStr);
+                const now = new Date();
+                const diffDays = Math.round((due.getTime() - now.getTime()) / 86400000);
+
+                let dueLabel: string;
+                if (diffDays < 0) dueLabel = `Due ${Math.abs(diffDays)}d ago`;
+                else if (diffDays === 0) dueLabel = "Due today";
+                else if (diffDays === 1) dueLabel = "Due tomorrow";
+                else dueLabel = `Due in ${diffDays}d`;
+
+                const stability = parseFloat(stabilityStr);
+                const interval = parseInt(intervalStr);
+                const difficulty = parseFloat(difficultyStr);
+
+                // Elapsed days since last review (approximated as due - interval)
+                const elapsed = Math.max(0, (now.getTime() - due.getTime()) / 86400000 + interval);
+                const recall = Math.round(Math.pow(1 + (19 / 81) * elapsed / stability, -0.5) * 100);
+
+                span.textContent = `${dueLabel} · Recall ${recall}% · Stability ${Math.round(stability)}d · Difficulty ${difficulty.toFixed(1)}`;
+                span.addClass("tutor-state-badge");
+            });
         });
 
-        // Commands
+        this.addRibbonIcon("brain-circuit", "Start Review Session", () => this.startReviewSession());
+
         this.addCommand({
             id: "tutor-start-review",
             name: "Start Review Session",
-            callback: () => this.startReviewSession()
+            callback: () => this.startReviewSession(),
         });
 
         this.addCommand({
-            id: "tutor-show-due-topics",
-            name: "Show Due Topics",
-            callback: () => this.showDueTopics()
+            id: "tutor-show-due-cards",
+            name: "Show Due Cards",
+            callback: () => this.showDueCards(),
         });
 
         this.addCommand({
-            id: "tutor-insert-topic-callout",
-            name: "Insert Topic Callout",
-            editorCallback(editor, ctx) {
+            id: "tutor-show-stats",
+            name: "Show Statistics",
+            callback: () => new StatsModal(this.app, this.cardManager).open(),
+        });
+
+        this.addCommand({
+            id: "tutor-insert-card-callout",
+            name: "Insert Card Callout",
+            editorCallback(editor) {
                 const cursor = editor.getCursor();
-                editor.replaceSelection("> [!topic] Title\n");
+                editor.replaceSelection("> [!card] Question\n> Answer\n");
                 editor.setSelection(
-                    // start to end of "Title"
-                    { line: cursor.line, ch: cursor.ch + 11 },
-                    { line: cursor.line, ch: cursor.ch + 16 }
+                    { line: cursor.line, ch: cursor.ch + 10 },
+                    { line: cursor.line, ch: cursor.ch + 18 },
                 );
-            }
+            },
         });
 
-        // Settings
         this.addSettingTab(new TutorSettingTab(this.app, this));
 
         console.log("Tutor plugin loaded");
@@ -70,46 +98,48 @@ export default class TutorPlugin extends Plugin {
     }
 
     async startReviewSession() {
-        const dueTopics = await this.topicManager.getDueTopics();
+        const dueCards = await this.cardManager.getDueCards();
 
-        if (dueTopics.length === 0) {
-            new Notice("No topics due for review.");
+        if (dueCards.length === 0) {
+            new Notice("No cards due for review.");
             return;
         }
 
-        // Randomize order
-        dueTopics.sort(() => Math.random() - 0.5);
+        // Group by file, then randomize groups and cards within each group
+        const groups = new Map<string, ReviewCard[]>();
+        for (const card of dueCards) {
+            const key = card.file.path;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(card);
+        }
 
-        // Check if the review view is already open
+        const groupList = Array.from(groups.values());
+        groupList.sort(() => Math.random() - 0.5);
+        for (const group of groupList) group.sort(() => Math.random() - 0.5);
+        const ordered = groupList.flat();
+
         let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
-
         if (leaf) {
-            // Use existing view and load new topics
-            const view = leaf.view as ReviewView;
-            await view.loadTopics(dueTopics);
+            await (leaf.view as ReviewView).loadCards(ordered);
         } else {
-            // Create new view
             leaf = this.app.workspace.getLeaf("tab");
-            await leaf.setViewState({
-                type: VIEW_TYPE_REVIEW,
-                state: { topics: dueTopics }
-            });
+            await leaf.setViewState({ type: VIEW_TYPE_REVIEW, state: { cards: ordered } });
         }
 
         this.app.workspace.setActiveLeaf(leaf);
     }
 
-    async showDueTopics() {
-        const dueTopics = await this.topicManager.getDueTopics();
+    async showDueCards() {
+        const dueCards = await this.cardManager.getDueCards();
 
-        if (dueTopics.length === 0) {
-            new Notice("No topics due for review.");
+        if (dueCards.length === 0) {
+            new Notice("No cards due for review.");
             return;
         }
 
-        const message = `Due for review (${dueTopics.length}):\n\n` +
-            dueTopics.map(c => `• ${c.name} (${c.file.basename})`).join("\n");
-
+        const message = `Due for review (${dueCards.length}):\n\n` +
+            dueCards.map(c => `• ${c.question} (${c.file.basename})`).join("\n");
         new Notice(message, 0);
     }
+
 }

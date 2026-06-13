@@ -1,12 +1,12 @@
 import { ItemView, MarkdownRenderer, Platform, setIcon, WorkspaceLeaf } from "obsidian";
 
-import { LLMProvider, OpenRouterProvider } from "src/llm-provider";
+import { OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
-import { Rating, TopicCard } from "src/types";
+import { Rating, ReviewCard } from "src/types";
 
 export const VIEW_TYPE_REVIEW = "tutor-review";
 
-const TUTOR_RESPONSE_SCHEMA = {
+const TUTOR_SCHEMA = {
     type: "json_schema",
     json_schema: {
         name: "tutor",
@@ -16,88 +16,103 @@ const TUTOR_RESPONSE_SCHEMA = {
             properties: {
                 message: {
                     type: "string",
-                    description: "Question, explanation, or feedback in Markdown format. Use LaTeX for math."
+                    description: "Response in Markdown.",
                 },
                 rating: {
                     enum: ["again", "hard", "good", "easy", null],
-                    description: "Spaced repetition rating, or null to continue dialogue."
-                }
+                    description: "Rating on grading turns, null for follow-ups.",
+                },
+                suggested_answer: {
+                    anyOf: [{ type: "string" }, { type: "null" }],
+                    description: "Improved rubric text sourced from the user's answer, or null.",
+                },
             },
-            required: ["message", "rating"],
-            additionalProperties: false
+            required: ["message", "rating", "suggested_answer"],
+            additionalProperties: false,
+        },
+    },
+};
+
+function computeDiff(a: string, b: string): { type: "same" | "add" | "remove"; text: string }[] {
+    const aLines = a.split("\n");
+    const bLines = b.split("\n");
+    const m = aLines.length;
+    const n = bLines.length;
+
+    const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            dp[i][j] = aLines[i - 1] === bLines[j - 1]
+                ? dp[i - 1][j - 1] + 1
+                : Math.max(dp[i - 1][j], dp[i][j - 1]);
         }
     }
-};
+
+    const result: { type: "same" | "add" | "remove"; text: string }[] = [];
+    let i = m, j = n;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && aLines[i - 1] === bLines[j - 1]) {
+            result.push({ type: "same", text: aLines[i - 1] });
+            i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            result.push({ type: "add", text: bLines[j - 1] });
+            j--;
+        } else {
+            result.push({ type: "remove", text: aLines[i - 1] });
+            i--;
+        }
+    }
+
+    return result.reverse();
+}
 
 export class ReviewView extends ItemView {
     private plugin: TutorPlugin;
-    private topics: TopicCard[] = [];
-    private currentTopicIndex = 0;
+    private cards: ReviewCard[] = [];
+    private currentCardIndex = 0;
     private conversation: { sender: string; content: string }[] = [];
     private conversationEl: HTMLElement;
     private inputEl: HTMLTextAreaElement;
     private sendBtn: HTMLButtonElement;
     private isWaitingForAI = false;
-    private llmProvider: LLMProvider;
+    private followUpCount = 0;
+    private llmProvider: OpenRouterProvider;
 
     constructor(leaf: WorkspaceLeaf, plugin: TutorPlugin) {
         super(leaf);
         this.plugin = plugin;
     }
 
-    getViewType() {
-        return VIEW_TYPE_REVIEW;
-    }
-
-    getDisplayText() {
-        return "Tutor";
-    }
-
-    getIcon() {
-        return "brain-circuit";
-    }
+    getViewType() { return VIEW_TYPE_REVIEW; }
+    getDisplayText() { return "Tutor"; }
+    getIcon() { return "brain-circuit"; }
 
     async setState(state: any, result: any) {
-        if (state.topics) {
-            await this.loadTopics(state.topics);
-        }
-
+        if (state.cards) await this.loadCards(state.cards);
         return super.setState(state, result);
     }
 
-    async loadTopics(topics: TopicCard[]) {
-        this.topics = topics;
-        this.currentTopicIndex = 0;
+    getState() {
+        return { cards: this.cards, currentCardIndex: this.currentCardIndex };
+    }
+
+    async loadCards(cards: ReviewCard[]) {
+        this.cards = cards;
+        this.currentCardIndex = 0;
         this.conversation = [];
 
         await this.render();
-
         this.initializeLLMProvider();
-        if (this.getCurrentTopic()) {
-            await this.startTopicReview();
-        }
+        if (this.getCurrentCard()) await this.startCardReview();
     }
 
-    private getCurrentTopic(): TopicCard | null {
-        return this.topics[this.currentTopicIndex] || null;
-    }
-
-    getState() {
-        return {
-            topics: this.topics,
-            currentTopicIndex: this.currentTopicIndex
-        };
+    private getCurrentCard(): ReviewCard | null {
+        return this.cards[this.currentCardIndex] ?? null;
     }
 
     private initializeLLMProvider() {
-        const { provider, apiKey, model } = this.plugin.settings;
-        switch (provider) {
-            case "openrouter":
-                this.llmProvider = new OpenRouterProvider(apiKey, model);
-                break
-            default:
-                throw new Error("Unsupported provider: " + provider);
-        }
+        const { apiKey, model } = this.plugin.settings;
+        this.llmProvider = new OpenRouterProvider(apiKey, model);
     }
 
     async onOpen() {}
@@ -106,22 +121,17 @@ export class ReviewView extends ItemView {
         const container = this.containerEl.children[1];
         container.empty();
 
-        const currentTopic = this.getCurrentTopic();
-        if (!currentTopic) {
-            container.createEl("p", { text: "No topics available for review." });
+        if (!this.getCurrentCard()) {
+            container.createEl("p", { text: "No cards available for review." });
             return;
         }
 
-        // Conversation area
         this.conversationEl = container.createEl("div", { cls: "tutor-conversation" });
 
-        // Input area
         const inputContainer = container.createEl("div", { cls: "tutor-input-area" });
-
         this.inputEl = inputContainer.createEl("textarea", {
-            attr: { rows: 1, placeholder: "Reply\u2026" }
+            attr: { rows: 1, placeholder: "Reply…" },
         });
-
         this.inputEl.addEventListener("input", () => {
             this.inputEl.style.height = "auto";
             this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 150) + "px";
@@ -131,8 +141,6 @@ export class ReviewView extends ItemView {
         setIcon(this.sendBtn, "arrow-up");
         this.sendBtn.onclick = () => this.sendMessage();
 
-        // Desktop only: Enter = send, Shift+Enter = newline
-        // Mobile: Enter = newline, tap send button
         if (Platform.isDesktop) {
             this.inputEl.addEventListener("keypress", (e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -150,124 +158,105 @@ export class ReviewView extends ItemView {
         this.sendBtn.disabled = !enabled;
     }
 
-    private async advanceToNextTopic() {
-        this.currentTopicIndex++;
-        this.conversation = [];
-        await this.startTopicReview();
+    private getSystemPrompt(mustGrade: boolean): string {
+        const card = this.getCurrentCard()!;
+        return `\
+You are grading a spaced repetition response. The question has already
+been presented; you are seeing the user's answer.
+
+## Card
+
+Question: ${card.question}
+
+Rubric (the only ground truth, never use your own knowledge):
+${card.answer}
+
+## Grading
+
+Use the rubric to understand what the card is about and what aspects
+matter. Your own knowledge is the factual authority. The rubric may
+be incomplete or wrong. If the rubric states something factually
+incorrect, do not grade the user on that claim and do not rationalize
+it into correctness — flag the error in suggested_answer instead.
+
+You may ask at most 2 clarifying follow-ups if the response is too
+ambiguous to grade. After that you must grade.
+
+Ratings:
+- again: couldn't cover the core claims
+- hard: got the gist but the explanation was incomplete or muddled
+- good: clearly explained, showed the reasoning behind each claim
+- easy: explained it so cleanly and precisely that nothing was left
+  implicit
+
+## Suggested answer
+
+If the answer could be improved, you may propose an updated rubric
+via suggested_answer. You may draw on your own knowledge here. Write
+it as prose expressing reasoning, not a list of conclusions. Leave it
+null if the rubric already covers the concept well.
+
+## Style
+
+Write like a knowledgeable peer. Be information dense: cover what
+matters, skip what doesn't, no hedges or caveats.
+
+Prose over lists. Vary sentence length: short sentences land hard,
+longer ones build and release. If there's an insight, deliver it
+rather than performing it.
+
+No em-dashes or double hyphens. No preamble, no metacommentary. No
+closing questions or CTAs. When you're done, stop.
+
+Avoid AI vocabulary: pivotal, robust, foster, showcase, underscore,
+delve, bolster, meticulous, crucial, testament, enhance, highlight
+(as verb), and similar words that assert without demonstrating.
+
+Avoid structural AI patterns: "not just X but also Y" parallelisms,
+the rule of three used to fake comprehensiveness, trailing
+participles that gesture at significance.
+
+Write in American English. Format in Markdown.
+${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
     }
 
-    private async startTopicReview() {
-        this.setInputEnabled(false);
-        this.addTopicSeparator(this.getCurrentTopic()!);
-        const result = await this.fetchTutorResponse();
-        if (result && result.rating !== null) {
-            await this.saveRatingAndAdvance(result.rating);
-        } else if (result) {
-            this.setInputEnabled(true);
-        }
-    }
-
-    private getSystemPrompt() {
-        const currentTopic = this.getCurrentTopic();
-        if (!currentTopic) return;
-
-        return `You are conducting a spaced repetition review.
-Keep the interaction quick: ask one focused question, get their answer,
-then give one complete assessment.
-
-## Context
-
-Topic: ${currentTopic.name}
-Their notes:
-${currentTopic.content}
-
-Don't reference what's in their notes or ask them to recall specific points
-from the notes. Test whether they understand the concept, not whether they
-remember what they wrote.
-
-Last rating: ${currentTopic.rating ?? 'new'}
-
-## Question Difficulty
-
-Ask ONE focused question per review to test one concept or connection,
-NOT multi-part scenarios.
-
-- After Again/Hard: Easier question. Test prerequisites or fundamentals.
-- After Good/Easy: Harder question. Applications, edge cases, novel connections.
-- New topic: Gauge-level question that reveals depth of understanding.
-
-## Assessment
-
-Don't accept vague answers. In your response:
-- State what's correct in their answer, then what needs correction
-- When their answer reveals a misconception, show the gap between
-  their mental model and the correct one
-- Teach what they missed - give them the actual mental model, not just the fact
-- Call out buzzwords used without clear explanations
-- Rate their understanding
-
-A "good" rating means they explained the reasoning, not just stated the
-conclusion. They should show why something is true or how it works, not
-just that it is.
-
-## Ratings
-
-again: Fundamental gaps, couldn't articulate basics
-hard: Partial understanding, missing key connections
-good: Solid grasp with minor gaps, explained it clearly
-easy: Deep understanding, handled edge cases, made connections independently
-
-Rate based only on what they demonstrated in their answer.
-
-## Writing Style
-
-Write like a knowledgeable peer, not documentation. Be direct. Skip:
-- Metacommentary about their answer or your teaching ("you've nailed",
-  "here's the key point", "the insight you demonstrated")
-- Preambles explaining what you're about to do
-- Summarizing what you just said
-- Bullet points unless they genuinely clarify structure
-
-Be concise but complete. Teach what's necessary to correct their
-understanding, then stop. Don't elaborate beyond the gap or pose
-follow-up questions.
-
-Don't use em-dashes.
-Format in Markdown; use LaTeX for math.
-
-The question must be self-contained and focused on "${currentTopic.name}".
-Ask exactly one question. Not multiple questions, not "part A/B", not
-"first X, then Y". One question.
-
-Grade immediately after they give you a response, DO NOT ask follow-ups,
-take their answer as final - it's what they gave you.`;
-    }
-
-    private async fetchTutorResponse(): Promise<{ message: string; rating: Rating | null } | null> {
+    private async fetchTutorResponse(): Promise<{ message: string; rating: Rating | null; suggested_answer: string | null } | null> {
         try {
-            const messages = [{ role: "system", content: this.getSystemPrompt() }];
-
+            const mustGrade = this.followUpCount >= 2;
+            const messages: { role: string; content: string }[] = [
+                { role: "system", content: this.getSystemPrompt(mustGrade) },
+            ];
             for (const msg of this.conversation) {
-                const role = msg.sender === "Tutor" ? "assistant" : "user";
-                const content = msg.content;
-                messages.push({ role, content });
+                messages.push({
+                    role: msg.sender === "Tutor" ? "assistant" : "user",
+                    content: msg.content,
+                });
             }
 
-            const response = await this.llmProvider.complete(messages, TUTOR_RESPONSE_SCHEMA);
+            const response = await this.llmProvider.complete(messages, TUTOR_SCHEMA);
             const parsed = JSON.parse(response);
 
-            this.conversation.push({
-                sender: "Tutor",
-                content: parsed.message,
-            });
+            this.conversation.push({ sender: "Tutor", content: parsed.message });
             await this.addMessageToUI("Tutor", parsed.message);
 
-            return { message: parsed.message, rating: parsed.rating?.toLowerCase() as Rating ?? null };
+            return {
+                message: parsed.message,
+                rating: parsed.rating?.toLowerCase() as Rating ?? null,
+                suggested_answer: parsed.suggested_answer ?? null,
+            };
         } catch (error) {
-            this.setInputEnabled(false);
             this.addErrorToUI("Error: " + error.message);
             return null;
         }
+    }
+
+    private async startCardReview() {
+        this.followUpCount = 0;
+        this.addCardSeparator();
+        const card = this.getCurrentCard()!;
+        this.conversation.push({ sender: "Tutor", content: card.question });
+        await this.addMessageToUI("Tutor", card.question);
+        this.setInputEnabled(true);
     }
 
     private async handleTurn() {
@@ -275,32 +264,62 @@ take their answer as final - it's what they gave you.`;
         this.isWaitingForAI = true;
         this.setInputEnabled(false);
 
-        try {
-            const result = await this.fetchTutorResponse();
-            if (result && result.rating !== null) {
-                await this.saveRatingAndAdvance(result.rating);
-            } else if (result) {
-                this.setInputEnabled(true);
+        const result = await this.fetchTutorResponse();
+        this.isWaitingForAI = false;
+
+        if (!result) return;
+
+        if (result.rating !== null) {
+            if (result.suggested_answer) {
+                this.showSuggestedAnswerPanel(this.getCurrentCard()!, result.suggested_answer);
             }
-        } finally {
-            this.isWaitingForAI = false;
+            await this.saveRatingAndAdvance(result.rating);
+        } else {
+            this.followUpCount++;
+            this.setInputEnabled(true);
         }
     }
 
     private async saveRatingAndAdvance(rating: Rating) {
-        const currentTopic = this.getCurrentTopic();
-        await this.plugin.topicManager.updateTopicInNote(currentTopic!, rating);
-
-        if (this.currentTopicIndex < this.topics.length - 1) {
-            await this.advanceToNextTopic();
+        await this.plugin.cardManager.updateCardInNote(this.getCurrentCard()!, rating);
+        this.currentCardIndex++;
+        this.conversation = [];
+        if (this.getCurrentCard()) {
+            await this.startCardReview();
         } else {
             this.setInputEnabled(false);
             await this.addMessageToUI("Tutor", "That's everything for today. Good work!");
         }
     }
 
+    private showSuggestedAnswerPanel(card: ReviewCard, suggested: string) {
+        const panel = this.conversationEl.createEl("div", { cls: "tutor-suggestion" });
+        panel.createEl("div", { cls: "tutor-suggestion-header", text: "Suggested rubric update" });
+
+        const diffEl = panel.createEl("div", { cls: "tutor-suggestion-diff" });
+        for (const { type, text } of computeDiff(card.answer, suggested)) {
+            const lineEl = diffEl.createEl("div", { cls: `tutor-diff-line tutor-diff-${type}` });
+            lineEl.createEl("span", { cls: "tutor-diff-marker", text: type === "add" ? "+ " : type === "remove" ? "- " : "  " });
+            lineEl.createEl("span", { text });
+        }
+
+        const btnRow = panel.createEl("div", { cls: "tutor-suggestion-buttons" });
+
+        const updateBtn = btnRow.createEl("button", { text: "Update", cls: "mod-cta" });
+        updateBtn.onclick = async () => {
+            await this.plugin.cardManager.updateAnswerInNote(card, suggested);
+            panel.remove();
+        };
+
+        btnRow.createEl("button", { text: "Dismiss" }).onclick = () => panel.remove();
+
+        this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
+    }
+
     async addMessageToUI(sender: "You" | "Tutor", content: string) {
-        const cls = sender === "You" ? "tutor-message tutor-message--user" : "tutor-message tutor-message--tutor";
+        const cls = sender === "You"
+            ? "tutor-message tutor-message--user"
+            : "tutor-message tutor-message--tutor";
         const messageEl = this.conversationEl.createEl("div", { cls });
 
         const headerEl = messageEl.createEl("div", { cls: "tutor-message-header" });
@@ -314,11 +333,9 @@ take their answer as final - it's what they gave you.`;
             setTimeout(() => setIcon(copyBtn, "copy"), 1500);
         };
 
-        // Render message
         const contentEl = messageEl.createEl("div");
         await MarkdownRenderer.render(this.app, content, contentEl, "", this);
 
-        // Scroll to bottom
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
     }
 
@@ -327,28 +344,19 @@ take their answer as final - it's what they gave you.`;
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
     }
 
-    private addTopicSeparator(topic: TopicCard) {
-        this.conversationEl.createEl("div", { cls: "tutor-separator" }, (el) => {
-            el.createEl("div", { cls: "tutor-separator-line" });
-            el.createEl("span", { text: topic.name });
-            el.createEl("div", { cls: "tutor-separator-line" });
-        });
+    private addCardSeparator() {
+        this.conversationEl.createEl("div", { cls: "tutor-separator" });
     }
 
     async sendMessage() {
         const message = this.inputEl.value.trim();
         if (!message || this.isWaitingForAI) return;
 
-        // Add user message to conversation
-        this.conversation.push({
-            sender: "You",
-            content: message,
-        });
+        this.conversation.push({ sender: "You", content: message });
         await this.addMessageToUI("You", message);
         this.inputEl.value = "";
         this.inputEl.style.height = "";
 
-        // Get AI response
         await this.handleTurn();
     }
 

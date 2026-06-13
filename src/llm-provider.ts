@@ -1,8 +1,4 @@
-export interface LLMProvider {
-    complete(messages: any[], responseFormat?: any): Promise<string>;
-}
-
-export class OpenRouterProvider implements LLMProvider {
+export class OpenRouterProvider {
     private apiKey: string;
     private model: string;
 
