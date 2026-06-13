@@ -42,7 +42,7 @@ export default class TutorPlugin extends Plugin {
                 const elapsed = Math.max(0, (now.getTime() - due.getTime()) / 86400000 + interval);
                 const recall = Math.round(Math.pow(1 + (19 / 81) * elapsed / stability, -0.5) * 100);
 
-                span.textContent = `${dueLabel} · Recall ${recall}% · Stability ${Math.round(stability)}d · Difficulty ${difficulty.toFixed(1)}`;
+                span.textContent = `${dueLabel} · Recall ${recall}% · Stability ${stability.toFixed(1)}d · Difficulty ${difficulty.toFixed(1)}`;
                 span.addClass("tutor-state-badge");
             });
         });
