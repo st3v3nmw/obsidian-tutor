@@ -6,6 +6,15 @@ import { Rating, ReviewCard } from "src/types";
 
 export const VIEW_TYPE_REVIEW = "tutor-review";
 
+interface SessionEntry {
+    card: ReviewCard;
+    rating: Rating;
+    newStability: number;
+    newDifficulty: number;
+    scheduledDays: number;
+    dueDate: Date;
+}
+
 const TUTOR_SCHEMA = {
     type: "json_schema",
     json_schema: {
@@ -24,7 +33,7 @@ const TUTOR_SCHEMA = {
                 },
                 suggested_answer: {
                     anyOf: [{ type: "string" }, { type: "null" }],
-                    description: "Improved rubric text sourced from the user's answer, or null.",
+                    description: "Improved answer text sourced from the user's response, or null.",
                 },
             },
             required: ["message", "rating", "suggested_answer"],
@@ -76,6 +85,7 @@ export class ReviewView extends ItemView {
     private sendBtn: HTMLButtonElement;
     private isWaitingForAI = false;
     private followUpCount = 0;
+    private sessionLog: SessionEntry[] = [];
     private llmProvider: OpenRouterProvider;
 
     constructor(leaf: WorkspaceLeaf, plugin: TutorPlugin) {
@@ -100,6 +110,7 @@ export class ReviewView extends ItemView {
         this.cards = cards;
         this.currentCardIndex = 0;
         this.conversation = [];
+        this.sessionLog = [];
 
         await this.render();
         this.initializeLLMProvider();
@@ -168,14 +179,14 @@ been presented; you are seeing the user's answer.
 
 Question: ${card.question}
 
-Rubric (the only ground truth, never use your own knowledge):
+Answer (the only ground truth):
 ${card.answer}
 
 ## Grading
 
-Use the rubric to understand what the card is about and what aspects
-matter. Your own knowledge is the factual authority. The rubric may
-be incomplete or wrong. If the rubric states something factually
+Use the answer to understand what the card is about and what aspects
+matter. Your own knowledge is the factual authority. The answer may
+be incomplete or wrong. If the answer states something factually
 incorrect, do not grade the user on that claim and do not rationalize
 it into correctness — flag the error in suggested_answer instead.
 
@@ -191,10 +202,16 @@ Ratings:
 
 ## Suggested answer
 
-If the answer could be improved, you may propose an updated rubric
-via suggested_answer. You may draw on your own knowledge here. Write
+If the answer could be improved, you may propose an update via
+suggested_answer. You may draw on your own knowledge here. Write
 it as prose expressing reasoning, not a list of conclusions. Leave it
-null if the rubric already covers the concept well.
+null if the answer already covers the concept well.
+
+If the answer covers more than one distinct idea, propose a tighter
+version focused on the single most important one; the user can decide
+whether to split the card. If the answer lists conclusions without
+explaining reasoning, or is so terse it doesn't encode the concept,
+rewrite it as prose that shows the why, not just the what.
 
 ## Style
 
@@ -282,20 +299,55 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
     }
 
     private async saveRatingAndAdvance(rating: Rating) {
-        await this.plugin.cardManager.updateCardInNote(this.getCurrentCard()!, rating);
+        const card = this.getCurrentCard()!;
+        const result = await this.plugin.cardManager.updateCardInNote(card, rating);
+        this.sessionLog.push({ card, rating, ...result });
         this.currentCardIndex++;
         this.conversation = [];
         if (this.getCurrentCard()) {
             await this.startCardReview();
         } else {
             this.setInputEnabled(false);
-            await this.addMessageToUI("Tutor", "That's everything for today. Good work!");
+            await this.addMessageToUI("Tutor", this.buildSessionSummary());
         }
+    }
+
+    private buildSessionSummary(): string {
+        const log = this.sessionLog;
+        const n = log.length;
+        const now = new Date();
+
+        const preRecallEntries = log.filter(e => e.card.reps > 0);
+        const preRecall = preRecallEntries.length > 0
+            ? preRecallEntries.reduce((sum, e) => {
+                const elapsed = e.card.interval + Math.max(0, (now.getTime() - e.card.nextReview.getTime()) / 86400000);
+                return sum + Math.pow(1 + (19 / 81) * elapsed / e.card.stability, -0.5);
+            }, 0) / preRecallEntries.length
+            : null;
+
+        const postRecall = log.reduce((sum, e) =>
+            sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / n;
+
+        const preStability = log.reduce((sum, e) => sum + e.card.stability, 0) / n;
+        const postStability = log.reduce((sum, e) => sum + e.newStability, 0) / n;
+        const preDifficulty = log.reduce((sum, e) => sum + e.card.difficulty, 0) / n;
+        const postDifficulty = log.reduce((sum, e) => sum + e.newDifficulty, 0) / n;
+
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split("T")[0];
+        const dueTomorrow = log.filter(e => e.dueDate.toISOString().split("T")[0] === tomorrowStr).length;
+
+        const recallStr = preRecall !== null
+            ? `Recall ${Math.round(preRecall * 100)}% → ${Math.round(postRecall * 100)}%`
+            : `Recall — → ${Math.round(postRecall * 100)}%`;
+
+        return `**${n} card${n === 1 ? "" : "s"} reviewed**\n\n${recallStr} · Stability ${preStability.toFixed(1)}d → ${postStability.toFixed(1)}d · Difficulty ${preDifficulty.toFixed(1)} → ${postDifficulty.toFixed(1)} · ${dueTomorrow} due tomorrow`;
     }
 
     private showSuggestedAnswerPanel(card: ReviewCard, suggested: string) {
         const panel = this.conversationEl.createEl("div", { cls: "tutor-suggestion" });
-        panel.createEl("div", { cls: "tutor-suggestion-header", text: "Suggested rubric update" });
+        panel.createEl("div", { cls: "tutor-suggestion-header", text: "Refine answer" });
 
         const diffEl = panel.createEl("div", { cls: "tutor-suggestion-diff" });
         for (const { type, text } of computeDiff(card.answer, suggested)) {
@@ -322,17 +374,6 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
             ? "tutor-message tutor-message--user"
             : "tutor-message tutor-message--tutor";
         const messageEl = this.conversationEl.createEl("div", { cls });
-
-        const headerEl = messageEl.createEl("div", { cls: "tutor-message-header" });
-        headerEl.createEl("span", { text: sender, cls: "tutor-message-sender" });
-
-        const copyBtn = headerEl.createEl("button", { cls: "tutor-copy-btn clickable-icon" });
-        setIcon(copyBtn, "copy");
-        copyBtn.onclick = () => {
-            navigator.clipboard.writeText(content);
-            setIcon(copyBtn, "check");
-            setTimeout(() => setIcon(copyBtn, "copy"), 1500);
-        };
 
         if (subtitle) {
             messageEl.createEl("div", { cls: "tutor-message-subtitle", text: subtitle });

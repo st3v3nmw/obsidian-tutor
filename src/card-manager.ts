@@ -163,7 +163,7 @@ export class CardManager {
         return bestDate;
     }
 
-    async updateCardInNote(card: ReviewCard, newRating: Rating) {
+    async updateCardInNote(card: ReviewCard, newRating: Rating): Promise<{ newStability: number; newDifficulty: number; scheduledDays: number; dueDate: Date }> {
         const fsrsCard: Card = {
             due: card.nextReview,
             stability: card.stability,
@@ -186,6 +186,7 @@ export class CardManager {
 
         const spanText = `${dueStr},${newRating},${scheduledDays},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps},${newState}`;
         await this.writeSpan(card, `> <span class="tutor-state">${spanText}</span>`);
+        return { newStability: newCard.stability, newDifficulty: newCard.difficulty, scheduledDays, dueDate: due };
     }
 
     async updateAnswerInNote(card: ReviewCard, newAnswer: string) {
