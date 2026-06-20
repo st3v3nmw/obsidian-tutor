@@ -13,4 +13,4 @@ Add cards to your notes using:
 > Answer
 ```
 
-The plugin schedules reviews with FSRS and grades your answers using an LLM via OpenRouter.
+The plugin schedules reviews with FSRS and grades your answers using an LLM.

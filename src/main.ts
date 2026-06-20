@@ -4,8 +4,7 @@ import { StatsModal } from "src/stats-modal";
 
 import { CardManager } from "src/card-manager";
 import { ReviewView, VIEW_TYPE_REVIEW } from "src/review-view";
-import { DEFAULT_SETTINGS, TutorSettings } from "src/settings";
-import { TutorSettingTab } from "src/settings-tab";
+import { DEFAULT_SETTINGS, TutorSettings, TutorSettingTab } from "src/settings-tab";
 import { ReviewCard } from "src/types";
 
 export default class TutorPlugin extends Plugin {
@@ -24,9 +23,11 @@ export default class TutorPlugin extends Plugin {
                 if (parts.length < 6) return;
 
                 const [dueStr, , intervalStr, stabilityStr, difficultyStr] = parts;
-                const due = new Date(dueStr);
+                const [y, m, d] = dueStr.split("-").map(Number);
+                const due = new Date(y, m - 1, d);
                 const now = new Date();
-                const diffDays = Math.round((due.getTime() - now.getTime()) / 86400000);
+                const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const diffDays = Math.round((due.getTime() - todayMidnight.getTime()) / 86400000);
 
                 let dueLabel: string;
                 if (diffDays < 0) dueLabel = `Due ${Math.abs(diffDays)}d ago`;

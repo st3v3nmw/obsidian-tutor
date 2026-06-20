@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-tutor",
-	"version": "2.0.1",
+	"version": "2.0.2",
 	"description": "Your notes become your tutor!",
 	"main": "main.js",
 	"scripts": {

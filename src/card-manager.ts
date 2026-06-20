@@ -29,6 +29,7 @@ export class CardManager {
             const content = await this.app.vault.read(file);
             cards.push(...this.parseCards(content, file));
         }
+
         return cards;
     }
 
@@ -41,8 +42,19 @@ export class CardManager {
     private parseCards(content: string, file: TFile): ReviewCard[] {
         const cards: ReviewCard[] = [];
         const lines = content.split("\n");
+        const headingStack: { level: number; text: string }[] = [];
 
         for (let i = 0; i < lines.length; i++) {
+            const hMatch = lines[i].match(/^(#{1,6})\s+(.+)$/);
+            if (hMatch) {
+                const level = hMatch[1].length;
+                while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
+                    headingStack.pop();
+                }
+
+                headingStack.push({ level, text: hMatch[2].trim() });
+            }
+
             const headerMatch = lines[i].match(/^>\s*\[!card\]\s*(.+)$/);
             if (!headerMatch) continue;
 
@@ -88,7 +100,7 @@ export class CardManager {
                 : bodyLines;
             const answer = answerLines.map(l => l.replace(/^>\s?/, "")).join("\n").trim();
 
-            cards.push({ question, answer, file, lineIndex, nextReview, rating, interval, stability, difficulty, reps, state });
+            cards.push({ question, answer, file, lineIndex, headings: headingStack.map(h => h.text), nextReview, rating, interval, stability, difficulty, reps, state });
         }
 
         return cards;
@@ -137,6 +149,7 @@ export class CardManager {
 
         for (let offset = -window; offset <= window; offset++) {
             if (offset === 0) continue;
+
             const candidate = new Date(fsrsDate);
             candidate.setDate(candidate.getDate() + offset);
             const key = candidate.toISOString().split("T")[0];
@@ -173,7 +186,6 @@ export class CardManager {
 
         const spanText = `${dueStr},${newRating},${scheduledDays},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps},${newState}`;
         await this.writeSpan(card, `> <span class="tutor-state">${spanText}</span>`);
-        new Notice(`Next review: ${dueStr}`);
     }
 
     async updateAnswerInNote(card: ReviewCard, newAnswer: string) {
@@ -219,6 +231,7 @@ export class CardManager {
             const m = lines[i].match(/^>\s*\[!card\]\s*(.+)$/);
             if (m && m[1].trim() === question) return i;
         }
+
         return -1;
     }
 

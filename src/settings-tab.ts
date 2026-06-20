@@ -2,6 +2,16 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 
 import TutorPlugin from "src/main";
 
+export interface TutorSettings {
+    apiKey: string;
+    model: string;
+}
+
+export const DEFAULT_SETTINGS: TutorSettings = {
+    apiKey: "",
+    model: "anthropic/claude-sonnet-4-6",
+};
+
 export class TutorSettingTab extends PluginSettingTab {
     plugin: TutorPlugin;
 

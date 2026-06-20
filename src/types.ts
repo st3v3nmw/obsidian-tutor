@@ -8,6 +8,7 @@ export interface ReviewCard {
     answer: string;
     file: TFile;
     lineIndex: number;
+    headings: string[];
     nextReview: Date;
     rating?: Rating;
     interval: number;

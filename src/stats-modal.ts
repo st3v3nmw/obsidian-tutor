@@ -46,6 +46,7 @@ export class StatsModal extends Modal {
         const root = this.buildTree(cards);
         const container = contentEl.createEl("div", { cls: "tutor-stats-container" });
         this.addHeaderRow(container);
+
         const body = container.createEl("div", { cls: "tutor-stats-body" });
         this.renderChildren(body, root, 0);
         this.addRow(container, "ALL", root.sums, 0, false).addClass("tutor-stats-total-row");
@@ -90,6 +91,7 @@ export class StatsModal extends Modal {
 
     private rollUp(node: TreeNode): Sums {
         if (node.isFile || node.children.size === 0) return node.sums;
+
         node.sums = emptySums();
         for (const child of node.children.values()) {
             const s = this.rollUp(child);
@@ -100,12 +102,14 @@ export class StatsModal extends Modal {
             node.sums.stabilitySum += s.stabilitySum;
             node.sums.difficultySum += s.difficultySum;
         }
+
         return node.sums;
     }
 
     private addHeaderRow(parent: HTMLElement) {
         const row = parent.createEl("div", { cls: "tutor-stats-row tutor-stats-header-row" });
         row.createEl("span", { cls: "tutor-stats-name tutor-stats-col-header", text: "Name" });
+
         for (const label of ["Cards", "Due", "Recall", "Stability", "Difficulty"]) {
             row.createEl("span", { cls: "tutor-stats-col tutor-stats-col-header", text: label });
         }
@@ -118,7 +122,7 @@ export class StatsModal extends Modal {
         const nameEl = el.createEl("span", { cls: "tutor-stats-name" });
         nameEl.style.paddingLeft = `${depth * 16}px`;
         if (isFolder) nameEl.createEl("span", { cls: "tutor-folder-arrow" });
-        nameEl.createEl("span", { text: isFolder ? label + "/" : label });
+        nameEl.createEl("span", { text: label });
 
         const recall = sums.recallCount > 0 ? `${Math.round(sums.recallSum / sums.recallCount * 100)}%` : "—";
         const stability = sums.recallCount > 0 ? `${(sums.stabilitySum / sums.recallCount).toFixed(1)}d` : "—";

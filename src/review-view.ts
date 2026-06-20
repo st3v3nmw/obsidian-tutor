@@ -254,8 +254,9 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
         this.followUpCount = 0;
         this.addCardSeparator();
         const card = this.getCurrentCard()!;
+        const crumbs = [card.file.basename, ...card.headings].join(" › ");
         this.conversation.push({ sender: "Tutor", content: card.question });
-        await this.addMessageToUI("Tutor", card.question);
+        await this.addMessageToUI("Tutor", card.question, crumbs);
         this.setInputEnabled(true);
     }
 
@@ -316,7 +317,7 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
         this.conversationEl.scrollTop = this.conversationEl.scrollHeight;
     }
 
-    async addMessageToUI(sender: "You" | "Tutor", content: string) {
+    async addMessageToUI(sender: "You" | "Tutor", content: string, subtitle?: string) {
         const cls = sender === "You"
             ? "tutor-message tutor-message--user"
             : "tutor-message tutor-message--tutor";
@@ -332,6 +333,10 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
             setIcon(copyBtn, "check");
             setTimeout(() => setIcon(copyBtn, "copy"), 1500);
         };
+
+        if (subtitle) {
+            messageEl.createEl("div", { cls: "tutor-message-subtitle", text: subtitle });
+        }
 
         const contentEl = messageEl.createEl("div");
         await MarkdownRenderer.render(this.app, content, contentEl, "", this);
