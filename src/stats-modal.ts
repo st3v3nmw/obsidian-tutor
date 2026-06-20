@@ -124,9 +124,9 @@ export class StatsModal extends Modal {
         if (isFolder) nameEl.createEl("span", { cls: "tutor-folder-arrow" });
         nameEl.createEl("span", { text: label });
 
-        const recall = sums.recallCount > 0 ? `${Math.round(sums.recallSum / sums.recallCount * 100)}%` : "—";
-        const stability = sums.recallCount > 0 ? `${(sums.stabilitySum / sums.recallCount).toFixed(1)}d` : "—";
-        const difficulty = sums.recallCount > 0 ? (sums.difficultySum / sums.recallCount).toFixed(1) : "—";
+        const recall = sums.recallCount > 0 ? `${Math.round(sums.recallSum / sums.recallCount * 100)}%` : "_";
+        const stability = sums.recallCount > 0 ? `${(sums.stabilitySum / sums.recallCount).toFixed(1)}d` : "_";
+        const difficulty = sums.recallCount > 0 ? (sums.difficultySum / sums.recallCount).toFixed(1) : "_";
 
         el.createEl("span", { cls: "tutor-stats-col", text: String(sums.cards) });
         el.createEl("span", { cls: "tutor-stats-col", text: String(sums.due) });

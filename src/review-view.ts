@@ -188,7 +188,7 @@ Use the answer to understand what the card is about and what aspects
 matter. Your own knowledge is the factual authority. The answer may
 be incomplete or wrong. If the answer states something factually
 incorrect, do not grade the user on that claim and do not rationalize
-it into correctness — flag the error in suggested_answer instead.
+it into correctness; flag the error in suggested_answer instead.
 
 You may ask at most 2 clarifying follow-ups if the response is too
 ambiguous to grade. After that you must grade.
@@ -317,32 +317,46 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
         const n = log.length;
         const now = new Date();
 
-        const preRecallEntries = log.filter(e => e.card.reps > 0);
-        const preRecall = preRecallEntries.length > 0
-            ? preRecallEntries.reduce((sum, e) => {
-                const elapsed = e.card.interval + Math.max(0, (now.getTime() - e.card.nextReview.getTime()) / 86400000);
-                return sum + Math.pow(1 + (19 / 81) * elapsed / e.card.stability, -0.5);
-            }, 0) / preRecallEntries.length
-            : null;
+        const newEntries = log.filter(e => e.card.reps === 0);
+        const existing = log.filter(e => e.card.reps > 0);
 
-        const postRecall = log.reduce((sum, e) =>
-            sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / n;
-
-        const preStability = log.reduce((sum, e) => sum + e.card.stability, 0) / n;
-        const postStability = log.reduce((sum, e) => sum + e.newStability, 0) / n;
-        const preDifficulty = log.reduce((sum, e) => sum + e.card.difficulty, 0) / n;
-        const postDifficulty = log.reduce((sum, e) => sum + e.newDifficulty, 0) / n;
+        const header = newEntries.length > 0
+            ? `**${n} card${n === 1 ? "" : "s"} reviewed (${newEntries.length} new)**`
+            : `**${n} card${n === 1 ? "" : "s"} reviewed**`;
 
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split("T")[0];
         const dueTomorrow = log.filter(e => e.dueDate.toISOString().split("T")[0] === tomorrowStr).length;
+        const dueTomorrowLine = dueTomorrow > 0 ? `\n\n${dueTomorrow} due tomorrow` : "";
 
-        const recallStr = preRecall !== null
-            ? `Recall ${Math.round(preRecall * 100)}% → ${Math.round(postRecall * 100)}%`
-            : `Recall — → ${Math.round(postRecall * 100)}%`;
+        const statsLine = (entries: typeof log, prefix = "") => {
+            const recall = entries.reduce((sum, e) =>
+                sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / entries.length;
+            const stability = entries.reduce((sum, e) => sum + e.newStability, 0) / entries.length;
+            const difficulty = entries.reduce((sum, e) => sum + e.newDifficulty, 0) / entries.length;
+            return `${prefix}Recall ${Math.round(recall * 100)}% · Stability ${stability.toFixed(1)}d · Difficulty ${difficulty.toFixed(1)}`;
+        };
 
-        return `**${n} card${n === 1 ? "" : "s"} reviewed**\n\n${recallStr} · Stability ${preStability.toFixed(1)}d → ${postStability.toFixed(1)}d · Difficulty ${preDifficulty.toFixed(1)} → ${postDifficulty.toFixed(1)} · ${dueTomorrow} due tomorrow`;
+        if (existing.length === 0) {
+            return `${header}\n\n${statsLine(newEntries)}${dueTomorrowLine}`;
+        }
+
+        const preRecall = existing.reduce((sum, e) => {
+            const elapsed = e.card.interval + Math.max(0, (now.getTime() - e.card.nextReview.getTime()) / 86400000);
+            return sum + Math.pow(1 + (19 / 81) * elapsed / e.card.stability, -0.5);
+        }, 0) / existing.length;
+        const postRecall = existing.reduce((sum, e) =>
+            sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / existing.length;
+        const preStability = existing.reduce((sum, e) => sum + e.card.stability, 0) / existing.length;
+        const postStability = existing.reduce((sum, e) => sum + e.newStability, 0) / existing.length;
+        const preDifficulty = existing.reduce((sum, e) => sum + e.card.difficulty, 0) / existing.length;
+        const postDifficulty = existing.reduce((sum, e) => sum + e.newDifficulty, 0) / existing.length;
+
+        const existingLine = `Recall ${Math.round(preRecall * 100)}% → ${Math.round(postRecall * 100)}% · Stability ${preStability.toFixed(1)}d → ${postStability.toFixed(1)}d · Difficulty ${preDifficulty.toFixed(1)} → ${postDifficulty.toFixed(1)}`;
+        const newLine = newEntries.length > 0 ? `\n\n${statsLine(newEntries, "New: ")}` : "";
+
+        return `${header}\n\n${existingLine}${newLine}${dueTomorrowLine}`;
     }
 
     private showSuggestedAnswerPanel(card: ReviewCard, suggested: string) {
