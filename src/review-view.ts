@@ -194,9 +194,9 @@ You may ask at most 2 clarifying follow-ups if the response is too
 ambiguous to grade. After that you must grade.
 
 Ratings:
-- again: couldn't cover the core claims
-- hard: got the gist but the explanation was incomplete or muddled
-- good: clearly explained, showed the reasoning behind each claim
+- again: couldn't cover the core claims, or the reasoning was confused or wrong
+- hard: got the claims but the explanation was incomplete or shallow
+- good: clearly explained, showed the reasoning
 - easy: explained it so cleanly and precisely that nothing was left
   implicit
 
