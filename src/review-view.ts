@@ -193,10 +193,17 @@ it into correctness; flag the error in suggested_answer instead.
 You may ask at most 2 clarifying follow-ups if the response is too
 ambiguous to grade. After that you must grade.
 
+Grade how well the user grasps the central idea and its reasoning,
+not whether they recited every sub-part. Many cards hold one concept
+with several necessary parts: a definition with multiple conditions, a
+proof with several steps. Treat those parts as a single idea. Missing
+one while grasping the concept is hard, not again.
+
 Ratings:
-- again: couldn't cover the core claims, or the reasoning was confused or wrong
-- hard: got the claims but the explanation was incomplete or shallow
-- good: clearly explained, showed the reasoning
+- again: missed the central idea, or the reasoning was confused or wrong
+- hard: got the idea but the explanation was incomplete or shallow, or
+  left out parts of a multi-part concept
+- good: clearly explained the idea and its reasoning
 - easy: explained it so cleanly and precisely that nothing was left
   implicit
 
@@ -207,11 +214,13 @@ suggested_answer. You may draw on your own knowledge here. Write
 it as prose expressing reasoning, not a list of conclusions. Leave it
 null if the answer already covers the concept well.
 
-If the answer covers more than one distinct idea, propose a tighter
-version focused on the single most important one; the user can decide
-whether to split the card. If the answer lists conclusions without
-explaining reasoning, or is so terse it doesn't encode the concept,
-rewrite it as prose that shows the why, not just the what.
+If the answer bundles independent ideas that each deserve their own
+card, propose a tighter version focused on the most important one to
+split off. Never split the parts of a single concept: a definition's
+conditions, a proof's steps, and the like belong together. If the
+answer lists conclusions without explaining reasoning, or is so terse
+it doesn't encode the concept, rewrite it as prose that shows the why,
+not just the what.
 
 ## Style
 
