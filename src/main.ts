@@ -3,6 +3,7 @@ import { Plugin, Notice } from "obsidian";
 import { StatsModal } from "src/stats-modal";
 
 import { CardManager } from "src/card-manager";
+import { currentRecall, elapsedDays } from "src/fsrs";
 import { ReviewView, VIEW_TYPE_REVIEW } from "src/review-view";
 import { DEFAULT_SETTINGS, TutorSettings, TutorSettingTab } from "src/settings-tab";
 import { ReviewCard } from "src/types";
@@ -39,9 +40,14 @@ export default class TutorPlugin extends Plugin {
                 const interval = parseInt(intervalStr);
                 const difficulty = parseFloat(difficultyStr);
 
-                // Elapsed days since last review (approximated as due - interval)
-                const elapsed = Math.max(0, (now.getTime() - due.getTime()) / 86400000 + interval);
-                const recall = Math.round(Math.pow(1 + (19 / 81) * elapsed / stability, -0.5) * 100);
+                let lastReview: Date | undefined;
+                if (parts.length >= 8 && parts[7]) {
+                    const [ly, lm, ld] = parts[7].split("-").map(Number);
+                    lastReview = new Date(ly, lm - 1, ld);
+                }
+
+                const elapsed = elapsedDays(now, due, interval, lastReview);
+                const recall = Math.round(currentRecall(stability, elapsed) * 100);
 
                 span.textContent = `${dueLabel} · Recall ${recall}% · Stability ${stability.toFixed(1)}d · Difficulty ${difficulty.toFixed(1)}`;
                 span.addClass("tutor-state-badge");

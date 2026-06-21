@@ -1,17 +1,12 @@
 import { App, Notice, TFile } from "obsidian";
-import { Card, fsrs, Grade, Rating as FSRSRating, State } from "ts-fsrs";
 
+import { scheduleNext } from "src/fsrs";
 import TutorPlugin from "src/main";
 import { CardState, Rating, ReviewCard } from "src/types";
 
 export class CardManager {
     private app: App;
     private plugin: TutorPlugin;
-    private fsrsInstance = fsrs({
-        request_retention: 0.9,
-        enable_fuzz: true,
-        enable_short_term: false,
-    });
 
     constructor(app: App, plugin: TutorPlugin) {
         this.app = app;
@@ -69,6 +64,7 @@ export class CardManager {
             }
 
             let nextReview = new Date(0);
+            let lastReview: Date | undefined;
             let rating: Rating | undefined;
             let interval = 1;
             let stability = 2.5;
@@ -91,6 +87,13 @@ export class CardManager {
                         difficulty = parseFloat(parts[4]);
                         reps = parseInt(parts[5]);
                         state = parts.length >= 7 ? (parts[6] as CardState) : "review";
+
+                        if (parts.length >= 8) {
+                            lastReview = new Date(parts[7]);
+                        } else if (state !== "new") {
+                            lastReview = new Date(nextReview);
+                            lastReview.setDate(lastReview.getDate() - interval);
+                        }
                     }
                 }
             }
@@ -100,37 +103,10 @@ export class CardManager {
                 : bodyLines;
             const answer = answerLines.map(l => l.replace(/^>\s?/, "")).join("\n").trim();
 
-            cards.push({ question, answer, file, lineIndex, headings: headingStack.map(h => h.text), nextReview, rating, interval, stability, difficulty, reps, state });
+            cards.push({ question, answer, file, lineIndex, headings: headingStack.map(h => h.text), nextReview, lastReview, rating, interval, stability, difficulty, reps, state });
         }
 
         return cards;
-    }
-
-    private mapRating(rating: Rating): Grade {
-        switch (rating) {
-            case "again": return FSRSRating.Again;
-            case "hard":  return FSRSRating.Hard;
-            case "good":  return FSRSRating.Good;
-            case "easy":  return FSRSRating.Easy;
-        }
-    }
-
-    private toFSRSState(state: CardState): State {
-        switch (state) {
-            case "new":        return State.New;
-            case "learning":   return State.Learning;
-            case "review":     return State.Review;
-            case "relearning": return State.Relearning;
-        }
-    }
-
-    private fromFSRSState(state: State): CardState {
-        switch (state) {
-            case State.New:        return "new";
-            case State.Learning:   return "learning";
-            case State.Review:     return "review";
-            case State.Relearning: return "relearning";
-        }
     }
 
     private async loadBalance(fsrsDate: Date, scheduledDays: number): Promise<Date> {
@@ -164,29 +140,17 @@ export class CardManager {
     }
 
     async updateCardInNote(card: ReviewCard, newRating: Rating): Promise<{ newStability: number; newDifficulty: number; scheduledDays: number; dueDate: Date }> {
-        const fsrsCard: Card = {
-            due: card.nextReview,
-            stability: card.stability,
-            difficulty: card.difficulty,
-            elapsed_days: card.interval,
-            scheduled_days: card.interval,
-            learning_steps: 0,
-            reps: card.reps,
-            lapses: 0,
-            state: this.toFSRSState(card.state),
-        };
+        const now = new Date();
+        const next = scheduleNext(card, newRating, now);
 
-        const result = this.fsrsInstance.next(fsrsCard, new Date(), this.mapRating(newRating));
-        const newCard = result.card;
-
-        const scheduledDays = Math.max(1, newCard.scheduled_days);
-        const due = await this.loadBalance(newCard.due, scheduledDays);
+        const scheduledDays = next.scheduledDays;
+        const due = await this.loadBalance(next.due, scheduledDays);
         const dueStr = due.toISOString().split("T")[0];
-        const newState = this.fromFSRSState(newCard.state);
+        const lastReviewStr = now.toISOString().split("T")[0];
 
-        const spanText = `${dueStr},${newRating},${scheduledDays},${newCard.stability.toFixed(1)},${newCard.difficulty.toFixed(1)},${newCard.reps},${newState}`;
+        const spanText = `${dueStr},${newRating},${scheduledDays},${next.stability.toFixed(1)},${next.difficulty.toFixed(1)},${next.reps},${next.state},${lastReviewStr}`;
         await this.writeSpan(card, `> <span class="tutor-state">${spanText}</span>`);
-        return { newStability: newCard.stability, newDifficulty: newCard.difficulty, scheduledDays, dueDate: due };
+        return { newStability: next.stability, newDifficulty: next.difficulty, scheduledDays, dueDate: due };
     }
 
     async updateAnswerInNote(card: ReviewCard, newAnswer: string) {

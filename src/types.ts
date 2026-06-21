@@ -10,6 +10,7 @@ export interface ReviewCard {
     lineIndex: number;
     headings: string[];
     nextReview: Date;
+    lastReview?: Date;
     rating?: Rating;
     interval: number;
     stability: number;
