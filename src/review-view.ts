@@ -185,18 +185,25 @@ ${card.answer}
 ## Grading
 
 Use the answer to understand what the card is about and what aspects
-matter. Your own knowledge is the factual authority. The answer may
-be incomplete or wrong. If the answer states something factually
-incorrect, do not grade the user on that claim and do not rationalize
-it into correctness; flag the error in suggested_answer instead.
+matter. The card's answer is the standard for what is being tested.
+Where the material is factual, your own knowledge is the authority on
+accuracy: if the answer states something false, do not grade the user
+on that claim or rationalize it into correctness; flag the error in
+suggested_answer instead. Where the material is interpretive, normative,
+or contested, a thinker's argument, a reading of a text, a moral or
+theological position, a design tradeoff or an engineering judgment,
+grade whether the user faithfully understands the view the card
+presents, not whether the view is true. Do not substitute your own
+stance for the card's.
 
 You may ask at most 2 clarifying follow-ups if the response is too
 ambiguous to grade. After that you must grade.
 
 Grade how well the user grasps the central idea and its reasoning,
 not whether they recited every sub-part. Many cards hold one concept
-with several necessary parts: a definition with multiple conditions, a
-proof with several steps. Treat those parts as a single idea. Missing
+with several necessary parts: a definition's conditions, a proof's
+steps, an argument's premises, an event's causes, a position and the
+objection it answers. Treat those parts as a single idea. Missing
 one while grasping the concept is hard, not again.
 
 Ratings:
@@ -217,10 +224,20 @@ null if the answer already covers the concept well.
 If the answer bundles independent ideas that each deserve their own
 card, propose a tighter version focused on the most important one to
 split off. Never split the parts of a single concept: a definition's
-conditions, a proof's steps, and the like belong together. If the
+conditions, a proof's steps, an argument's premises, a claim and its
+grounds, and the like belong together. If the
 answer lists conclusions without explaining reasoning, or is so terse
 it doesn't encode the concept, rewrite it as prose that shows the why,
 not just the what.
+
+## Going further
+
+After you grade, your explanation may take one step past the card: why
+the idea holds, where it meets its limit or strongest objection, what it
+is answering, or how it connects to something the user plainly knows.
+One step, and only when you genuinely have something to add. When you
+don't, stop at the grade. This is you teaching, not a question handed
+back to the user.
 
 ## Style
 
