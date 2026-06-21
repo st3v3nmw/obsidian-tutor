@@ -3,7 +3,9 @@ import { Plugin, Notice } from "obsidian";
 import { StatsModal } from "src/stats-modal";
 
 import { CardManager } from "src/card-manager";
+import { buildDraftMessages, DRAFT_SCHEMA, formatCards } from "src/card-drafter";
 import { currentRecall, elapsedDays } from "src/fsrs";
+import { OpenRouterProvider } from "src/llm-provider";
 import { ReviewView, VIEW_TYPE_REVIEW } from "src/review-view";
 import { DEFAULT_SETTINGS, TutorSettings, TutorSettingTab } from "src/settings-tab";
 import { ReviewCard } from "src/types";
@@ -72,6 +74,38 @@ export default class TutorPlugin extends Plugin {
             id: "tutor-show-stats",
             name: "Show Statistics",
             callback: () => new StatsModal(this.app, this.cardManager).open(),
+        });
+
+        this.addCommand({
+            id: "tutor-draft-cards",
+            name: "Draft Cards from Selection",
+            editorCallback: async (editor) => {
+                const selection = editor.getSelection().trim();
+                if (!selection) {
+                    new Notice("Select some text to draft cards from.");
+                    return;
+                }
+
+                const { apiKey, model } = this.settings;
+                const provider = new OpenRouterProvider(apiKey, model);
+                const notice = new Notice("Drafting cards…", 0);
+                try {
+                    const response = await provider.complete(buildDraftMessages(selection), DRAFT_SCHEMA);
+                    const { cards } = JSON.parse(response);
+                    if (!cards?.length) {
+                        new Notice("No cards drafted from that selection.");
+                        return;
+                    }
+
+                    const block = formatCards(cards);
+                    editor.replaceRange(`\n\n${block}\n`, editor.getCursor("to"));
+                    new Notice(`Drafted ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
+                } catch (e) {
+                    new Notice("Error drafting cards: " + e.message);
+                } finally {
+                    notice.hide();
+                }
+            },
         });
 
         this.addCommand({
