@@ -1,4 +1,4 @@
-import { Plugin, Notice } from "obsidian";
+import { Editor, Menu, Plugin, Notice } from "obsidian";
 
 import { StatsModal } from "src/stats-modal";
 
@@ -79,34 +79,20 @@ export default class TutorPlugin extends Plugin {
         this.addCommand({
             id: "tutor-draft-cards",
             name: "Draft Cards from Selection",
-            editorCallback: async (editor) => {
-                const selection = editor.getSelection().trim();
-                if (!selection) {
-                    new Notice("Select some text to draft cards from.");
-                    return;
-                }
-
-                const { apiKey, model } = this.settings;
-                const provider = new OpenRouterProvider(apiKey, model);
-                const notice = new Notice("Drafting cards…", 0);
-                try {
-                    const response = await provider.complete(buildDraftMessages(selection), DRAFT_SCHEMA);
-                    const { cards } = JSON.parse(response);
-                    if (!cards?.length) {
-                        new Notice("No cards drafted from that selection.");
-                        return;
-                    }
-
-                    const block = formatCards(cards);
-                    editor.replaceRange(`\n\n${block}\n`, editor.getCursor("to"));
-                    new Notice(`Drafted ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
-                } catch (e) {
-                    new Notice("Error drafting cards: " + e.message);
-                } finally {
-                    notice.hide();
-                }
-            },
+            editorCallback: (editor) => this.draftCardsFromEditor(editor),
         });
+
+        this.registerEvent(
+            this.app.workspace.on("editor-menu", (menu: Menu, editor: Editor) => {
+                if (!editor.getSelection().trim()) return;
+                menu.addItem(item =>
+                    item
+                        .setTitle("Draft cards from selection")
+                        .setIcon("brain-circuit")
+                        .onClick(() => this.draftCardsFromEditor(editor))
+                );
+            })
+        );
 
         this.addCommand({
             id: "tutor-insert-card-callout",
@@ -181,6 +167,34 @@ export default class TutorPlugin extends Plugin {
         const message = `Due for review (${dueCards.length}):\n\n` +
             dueCards.map(c => `• ${c.question} (${c.file.basename})`).join("\n");
         new Notice(message, 0);
+    }
+
+    private async draftCardsFromEditor(editor: Editor) {
+        const selection = editor.getSelection().trim();
+        if (!selection) {
+            new Notice("Select some text to draft cards from.");
+            return;
+        }
+
+        const { apiKey, model } = this.settings;
+        const provider = new OpenRouterProvider(apiKey, model);
+        const notice = new Notice("Drafting cards…", 0);
+        try {
+            const response = await provider.complete(buildDraftMessages(selection), DRAFT_SCHEMA);
+            const { cards } = JSON.parse(response);
+            if (!cards?.length) {
+                new Notice("No cards drafted from that selection.");
+                return;
+            }
+
+            const block = formatCards(cards);
+            editor.replaceRange(`\n\n${block}\n`, editor.getCursor("to"));
+            new Notice(`Drafted ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
+        } catch (e) {
+            new Notice("Error drafting cards: " + e.message);
+        } finally {
+            notice.hide();
+        }
     }
 
 }

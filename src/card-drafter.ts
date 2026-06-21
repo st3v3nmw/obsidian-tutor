@@ -43,11 +43,14 @@ worthwhile card, return fewer cards, or none at all.
 
 ## Cards
 
-Produce one to three cards, one per distinct idea the passage develops.
+Produce one card per distinct idea the passage develops. Use as many cards as
+the passage warrants and as few as it supports.
 A good card asks for understanding, not trivia: the question names the
 concept, the answer explains it in prose that shows the reasoning rather
-than listing conclusions. Keep each card to a single concept; a concept
-with several necessary parts stays one card. Each answer is the only
+than listing conclusions. Each question asks exactly one thing. No "and",
+no two-part phrasing. A question that wants to ask two things becomes two
+cards or loses the weaker part. Keep each card to a single concept; a
+concept with several necessary parts stays one card. Each answer is the only
 ground truth a later grader checks against, so it must stand on its own
 without the passage in view.
 

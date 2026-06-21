@@ -1,5 +1,6 @@
 import { ItemView, MarkdownRenderer, Platform, setIcon, WorkspaceLeaf } from "obsidian";
 
+import { currentRecall, elapsedDays } from "src/fsrs";
 import { OpenRouterProvider } from "src/llm-provider";
 import TutorPlugin from "src/main";
 import { Rating, ReviewCard } from "src/types";
@@ -358,7 +359,7 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
 
         const statsLine = (entries: typeof log, prefix = "") => {
             const recall = entries.reduce((sum, e) =>
-                sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / entries.length;
+                sum + currentRecall(e.newStability, e.scheduledDays), 0) / entries.length;
             const stability = entries.reduce((sum, e) => sum + e.newStability, 0) / entries.length;
             const difficulty = entries.reduce((sum, e) => sum + e.newDifficulty, 0) / entries.length;
             return `${prefix}Recall ${Math.round(recall * 100)}% · Stability ${stability.toFixed(1)}d · Difficulty ${difficulty.toFixed(1)}`;
@@ -369,11 +370,11 @@ ${mustGrade ? "\nThis is your final turn. You must emit a rating now." : ""}`;
         }
 
         const preRecall = existing.reduce((sum, e) => {
-            const elapsed = e.card.interval + Math.max(0, (now.getTime() - e.card.nextReview.getTime()) / 86400000);
-            return sum + Math.pow(1 + (19 / 81) * elapsed / e.card.stability, -0.5);
+            const elapsed = elapsedDays(now, e.card.nextReview, e.card.interval, e.card.lastReview);
+            return sum + currentRecall(e.card.stability, elapsed);
         }, 0) / existing.length;
         const postRecall = existing.reduce((sum, e) =>
-            sum + Math.pow(1 + (19 / 81) * e.scheduledDays / e.newStability, -0.5), 0) / existing.length;
+            sum + currentRecall(e.newStability, e.scheduledDays), 0) / existing.length;
         const preStability = existing.reduce((sum, e) => sum + e.card.stability, 0) / existing.length;
         const postStability = existing.reduce((sum, e) => sum + e.newStability, 0) / existing.length;
         const preDifficulty = existing.reduce((sum, e) => sum + e.card.difficulty, 0) / existing.length;
